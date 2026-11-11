@@ -1,5 +1,5 @@
 // Offline support for the web app: the app itself is cached; Google Drive and GitHub calls always go to the network.
-const VERSION = "penmit-0.2.0";
+const VERSION = "penmit-0.3.0";
 const CORE = [
   "./",
   "index.html",

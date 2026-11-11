@@ -1,14 +1,14 @@
 {
   "name": "Penmit PDF",
   "short_name": "Penmit",
-  "description": "Read and handwrite on PDFs on any device, and keep them in your own GitHub repository.",
+  "description": "Read and handwrite on PDFs on any device, and keep them in your own Google Drive or GitHub.",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#eef0f4",
-  "theme_color": "#eef0f4",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "icons": [
     { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },

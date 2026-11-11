@@ -234,13 +234,13 @@ def sign_in_popup(page):
     page.locator("input[name=storage][value=gdrive]").check()
     check(page.locator("#gdrive-panel").is_visible() and not page.locator("#github-panel").is_visible(), "choosing Google Drive shows only the Drive panel")
     page.wait_for_function("() => document.querySelector('#gdrive-status').textContent.length > 0")
-    check("로그인하지 않았어요" in page.locator("#gdrive-status").inner_text(), "not signed in yet")
+    check("로그인 안 됨" in page.locator("#gdrive-status").inner_text(), "not signed in yet")
     with page.expect_popup() as pop:
         page.locator("#google-sign-in").click()
     popup = pop.value
     popup.wait_for_event("close", timeout=10000)
     status = wait_status(page)
-    page.locator("button[value=save]").click()
+    page.locator("#settings button[value=save]").click()
     return status
 
 
@@ -346,7 +346,8 @@ with sync_playwright() as p:
 
     # Deleting on A sends the folder to Drive's bin; B removes it too.
     A.once("dialog", lambda d: d.accept())
-    A.locator(".doc", has_text="test").locator(".doc-del").click()
+    A.locator(".doc", has_text="test").locator(".doc-more").click()
+    A.locator(".menu [data-action=delete]").click()
     A.wait_for_timeout(500)
     do_sync(A)
     trashed = [f for f in drive.files.values() if f.get("trashed")]
@@ -364,7 +365,7 @@ with sync_playwright() as p:
         A.locator("#google-sign-in").click()
     pop.value.wait_for_event("close", timeout=10000)
     wait_status(A)
-    A.locator("button[value=save]").click()
+    A.locator("#settings button[value=save]").click()
     toast = do_sync(A)
     check("이미 최신이에요" in toast, f"sync works again after signing in: {toast}")
 
@@ -377,7 +378,7 @@ with sync_playwright() as p:
     C.wait_for_selector("#settings[open]", timeout=10000)
     status = wait_status(C)
     check("penmit.tester@example.com" in status.lower() and "#" not in C.url, f"redirect sign-in returns to settings, signed in, clean address: {status} {C.url}")
-    C.locator("button[value=save]").click()
+    C.locator("#settings button[value=save]").click()
     do_sync(C)
     check(C.locator(".doc").count() == 1, "C got the PDF from Drive")
 
@@ -387,7 +388,7 @@ with sync_playwright() as p:
     C.locator("#google-sign-out").click()
     C.wait_for_function("() => !document.querySelector('#google-sign-in').hidden")
     check(C.evaluate("localStorage.getItem('penmit.google.token')") is None and len(drive.revoked) == 1, "sign-out removes and revokes the token")
-    C.locator("button[value=cancel]").last.click()
+    C.locator("#settings button[value=cancel]").last.click()
 
     # Desktop app: sign-in and Drive requests go through the main process.
     drive.tokens.add("deskTok")
@@ -396,7 +397,7 @@ with sync_playwright() as p:
     D.locator("input[name=storage][value=gdrive]").check()
     D.locator("#google-sign-in").click()
     status = wait_status(D)
-    D.locator("button[value=save]").click()
+    D.locator("#settings button[value=save]").click()
     do_sync(D)
     open_doc(D, "big")
     pen(D, 0, 0.3, 0.5)

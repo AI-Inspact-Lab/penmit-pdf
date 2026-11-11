@@ -31,7 +31,7 @@ export async function openPdf(bytes) {
 
 export const isPasswordError = (e) => e?.name === "PasswordException";
 
-export async function renderThumbnail(pdf, width = 300) {
+export async function renderThumbnail(pdf, width = 420) {
   const page = await pdf.getPage(1);
   const base = page.getViewport({ scale: 1 });
   const viewport = page.getViewport({ scale: width / base.width });
@@ -41,7 +41,7 @@ export async function renderThumbnail(pdf, width = 300) {
   const ctx = canvas.getContext("2d", { alpha: false });
   await page.render({ canvasContext: ctx, viewport, background: "#ffffff" }).promise;
   page.cleanup();
-  return canvas.toDataURL("image/jpeg", 0.82);
+  return canvas.toDataURL("image/jpeg", 0.85);
 }
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));

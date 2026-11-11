@@ -1,7 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#2b59c3"/>
-  <path d="M146 88h178l70 70v266H146z" fill="#ffffff"/>
-  <path d="M324 88v70h70z" fill="#c7d4f4"/>
-  <path d="M190 332c22-52 44-84 66-70s-4 74 22 78 40-62 66-96" fill="none" stroke="#1b2230" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="344" cy="244" r="26" fill="#ffb020" stroke="#ffffff" stroke-width="10"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f86ff"/><stop offset="1" stop-color="#2457e6"/></linearGradient></defs>
+  <rect width="512" height="512" rx="114" fill="url(#g)"/>
+  <path d="M146 92h164l78 78v252a24 24 0 0 1-24 24H146a24 24 0 0 1-24-24V116a24 24 0 0 1 24-24z" fill="#ffffff"/>
+  <path d="M310 92v54a24 24 0 0 0 24 24h54z" fill="#cfdcff"/>
+  <path d="M170 214h128M170 256h168M170 298h96" stroke="#dbe2ee" stroke-width="18" stroke-linecap="round"/>
+  <path d="M170 372c16-26 32-30 40-10s22 20 36-6 30-24 40-4" fill="none" stroke="#2457e6" stroke-width="17" stroke-linecap="round" stroke-linejoin="round"/>
+  <g transform="rotate(38 352 330)">
+    <rect x="330" y="150" width="46" height="190" rx="12" fill="#ffb21e"/>
+    <rect x="330" y="150" width="46" height="34" rx="12" fill="#ff8a65"/>
+    <rect x="330" y="176" width="46" height="12" fill="#e0e4ea"/>
+    <path d="M330 338h46l-23 50z" fill="#f6dcb4"/>
+    <path d="M345 371h16l-8 17z" fill="#191f28"/>
+  </g>
 </svg>

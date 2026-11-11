@@ -124,22 +124,29 @@ with sync_playwright() as p:
     page.wait_for_timeout(600)
     check(page.evaluate(READ_INK)[0]["n"] == 3, "redo then undo keeps three strokes")
 
-    # Layouts.
-    page.locator("[data-layout=double]").click()
+    # Layouts, from the view menu.
+    def layout(name):
+        page.locator("#view-btn").click()
+        page.locator(f"[data-layout={name}]").click()
+        check(page.locator("#view-menu").is_hidden(), f"view menu closes after choosing {name}")
+    layout("double")
     page.wait_for_timeout(300)
     check(page.locator(".page-row").count() == 3, "two-page layout has 3 rows")
     page.screenshot(path=S + "04_double.png")
-    page.locator("[data-layout=cover]").click()
+    layout("cover")
     page.wait_for_timeout(300)
     rows = page.evaluate("[...document.querySelectorAll('.page-row')].map(r => r.children.length)")
     check(rows == [1, 2, 2, 1], f"cover layout rows {rows}")
-    page.locator("[data-layout=single]").click()
+    layout("single")
     page.wait_for_timeout(300)
+    page.locator("#view-btn").click()
     page.locator("#zoom-in").click()
     page.wait_for_timeout(300)
-    check(page.locator("#zoom-fit").inner_text() == "125%", "zoom in to 125%")
+    check(page.locator("#zoom-fit").inner_text() == "125%" and page.locator("#view-menu").is_visible(), "zoom in to 125%, menu stays open")
     page.locator("#zoom-fit").click()
     page.wait_for_timeout(300)
+    page.keyboard.press("Escape")
+    check(page.locator("#view-menu").is_hidden(), "Escape closes the view menu")
 
     # Draw on the rotated page 5 and the landscape page 4.
     page.locator("[data-tool=pen]").click()
@@ -170,6 +177,32 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     check(page.locator(".doc").count() == 1, "library lists the PDF")
     page.screenshot(path=S + "06_library.png")
+
+    # Search, rename and save from the tile's menu.
+    page.fill("#search", "nothing-like-this")
+    page.wait_for_timeout(300)
+    check(page.locator(".doc").count() == 0 and page.locator("#no-results").is_visible(), "search with no match shows a message")
+    page.fill("#search", "TEST")
+    page.wait_for_timeout(300)
+    check(page.locator(".doc").count() == 1, "search ignores case")
+    page.fill("#search", "")
+    page.wait_for_timeout(300)
+    page.locator(".doc-more").first.click()
+    page.locator(".menu [data-action=rename]").click()
+    page.locator("#rename input").fill("Renamed notes.pdf")
+    page.locator("#rename button[value=ok]").click()
+    page.wait_for_timeout(400)
+    check("Renamed notes.pdf" in page.locator(".doc .doc-name").first.inner_text(), "renamed from the menu")
+    with page.expect_download() as dl2:
+        page.locator(".doc-more").first.click()
+        page.locator(".menu [data-action=export]").click()
+    check(dl2.value.suggested_filename == "Renamed notes (Penmit).pdf", f"saved from the library: {dl2.value.suggested_filename}")
+    page.wait_for_timeout(300)
+    page.locator("#sort-btn").click()
+    page.wait_for_timeout(200)
+    n = page.locator(".menu:not([hidden]) [role=menuitemradio]").count()
+    check(n == 3, f"sort menu has three choices ({n}; menus: {page.evaluate('[...document.querySelectorAll(".menu")].map(m => m.hidden + ":" + m.children.length)')})")
+    page.keyboard.press("Escape")
 
     # Re-open restores layout/zoom/page state and ink.
     page.locator(".doc-open").first.click()

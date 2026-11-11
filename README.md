@@ -36,7 +36,7 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 
 ### 저장 위치 고르기
 
-**설정 → 저장·동기화**에서 고르세요. 기기마다 같은 곳을 고르면 서로 이어져요.
+**설정(톱니바퀴) → 동기화**에서 고르세요. 기기마다 같은 곳을 고르면 서로 이어져요.
 
 | 저장 위치 | 이런 분께 | 준비물 |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 
 ### 구글 드라이브 (가장 쉬워요)
 
-1. **설정 → 저장·동기화 → 구글 드라이브**를 고르고 **Google 계정으로 로그인**을 눌러요.
+1. **설정 → 동기화 → 구글 드라이브**를 고르고 **구글 계정으로 로그인**을 눌러요.
 2. 구글 화면에서 계정을 고르고 허용하면 끝이에요. **저장**을 누르고 **동기화**하세요.
 3. 다른 기기에서도 같은 계정으로 로그인하면 돼요.
 
@@ -62,7 +62,7 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 2. [Fine-grained 토큰](https://github.com/settings/personal-access-tokens/new)을 만들어요.
    - Repository access: **Only select repositories** → 방금 만든 저장소
    - Permissions → Repository permissions → **Contents: Read and write**
-3. 팬밋 PDF의 **설정 → 저장·동기화 → GitHub**을 고르고 소유자(내 GitHub 아이디), 저장소 이름, 토큰을 넣은 뒤 **연결 확인** → **저장**
+3. 팬밋 PDF의 **설정 → 동기화 → GitHub**을 고르고 소유자(내 GitHub 아이디), 저장소 이름, 토큰을 넣은 뒤 **연결 확인** → **저장**
 4. **동기화**를 누르면 끝이에요. 다른 기기에서도 같은 저장소와 토큰을 넣으면 돼요.
 
 ### 어떻게 저장되나
@@ -79,8 +79,9 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 
 ### 쓰는 법
 
-- **펜:** 펜으로 바로 필기하고, 손가락으로는 화면을 움직여요. 펜이 없는 기기는 설정에서 **손가락으로도 필기하기**를 켜세요. 그때는 두 손가락으로 움직이고 확대해요.
-- **확대:** 두 손가락 핀치, Ctrl + 마우스 휠, 위쪽의 −/+ 버튼. 퍼센트를 누르면 폭에 맞춰요.
+- **펜:** 펜으로 바로 필기하고, 손가락으로는 화면을 움직여요. 펜이 없는 기기는 설정에서 **손가락으로 필기**를 켜세요. 그때는 두 손가락으로 움직이고 확대해요.
+- **보기·확대:** 오른쪽 위 책 모양 버튼에서 한 쪽/두 쪽/표지 + 두 쪽 보기와 확대 비율을 고를 수 있어요. 두 손가락 핀치, Ctrl + 마우스 휠도 돼요.
+- **문서 관리:** 문서 이름 옆 ⌄ 버튼(또는 오른쪽 클릭)으로 이름 바꾸기, 필기 포함 PDF 저장, 삭제를 할 수 있어요.
 - **단축키:** P 펜, H 형광펜, E 지우개, V 손, Ctrl+Z 실행 취소, Ctrl+Shift+Z 또는 Ctrl+Y 다시 실행
 
 ### 개인정보
@@ -90,7 +91,7 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 - GitHub 토큰은 저장소 하나, Contents 권한 하나만 주세요. 유출되더라도 그 저장소 밖으로는 영향이 없어요.
 - 자세한 내용: [개인정보처리방침](https://ai-inspact-lab.github.io/penmit-pdf/privacy.html)
 
-### 베타 안내 (0.2.0)
+### 베타 안내 (0.3.0)
 
 - 안드로이드 앱에서는 아직 구글 드라이브를 쓸 수 없어요.
 - 암호가 걸린 PDF는 아직 열 수 없어요.
@@ -127,13 +128,13 @@ On first launch Windows may show "Windows protected your PC": choose **More info
 
 ### Choose where to sync
 
-Pick one in **Settings → Storage and sync**, and pick the same one on each device.
+Pick one in **Settings (gear) → Sync**, and pick the same one on each device.
 
 - **Google Drive** (easiest): choose **Sign in with Google**, allow access, **Save**, then **Sync**. Sign in with the same account on your other devices. Files go into a `Penmit PDF` folder in your Drive. The app asks only for the `drive.file` permission, so it sees nothing but the files it created. PDFs deleted in the app go to Drive's bin. The web app may ask you to sign in again after about an hour; the Windows and Linux apps remember the sign-in. **The Android app doesn't support Google Drive yet**: use GitHub there, or the web app in Chrome.
 - **GitHub** (for developers):
   1. Create a **private** repository, e.g. `penmit-notes`.
   2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only that repository** and **Contents: Read and write**.
-  3. In **Settings → Storage and sync**, choose **GitHub**, enter the owner, repository and token, choose **Test connection**, then **Save**.
+  3. In **Settings → Sync**, choose **GitHub**, enter the owner, repository and token, choose **Test connection**, then **Save**.
   4. Press **Sync**. Use the same repository and token on your other devices.
 - **This device only**: no sync.
 

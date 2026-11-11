@@ -153,7 +153,7 @@ def configure(page, repo="notes"):
     page.locator("#test-github").click()
     page.wait_for_function("() => document.querySelector('#github-status').classList.contains('ok')", timeout=5000)
     status = page.locator("#github-status").inner_text()
-    page.locator("button[value=save]").click()
+    page.locator("#settings button[value=save]").click()
     return status
 
 
@@ -201,7 +201,7 @@ with sync_playwright() as p:
     A.locator("#back").click()
     A.wait_for_selector("#library:not([hidden])")
     status = configure(A)
-    check("me/notes" in status and "비공개" in status, f"connection test: {status}")
+    check("me/notes" in status and "공개" not in status, f"connection test: {status}")
     toast = do_sync(A)
     files = sorted(repos["me/notes"].files())
     check(any(f.endswith("document.pdf") for f in files) and any(f.endswith("ink.json") for f in files) and "README.md" in files, f"A uploaded files {files}")
@@ -267,7 +267,8 @@ with sync_playwright() as p:
 
     # A deletes the PDF; the deletion reaches GitHub and then B.
     A.on("dialog", lambda d: d.accept())
-    A.locator(".doc-del").first.click()
+    A.locator(".doc-more").first.click()
+    A.locator(".menu [data-action=delete]").click()
     A.wait_for_timeout(500)
     do_sync(A)
     check(not any(f.startswith("penmit/") for f in repos["me/notes"].files()), f"deleted from GitHub {sorted(repos['me/notes'].files())}")
@@ -284,7 +285,7 @@ with sync_playwright() as p:
     B.locator("#test-github").click()
     B.wait_for_function("() => document.querySelector('#github-status').classList.contains('bad')")
     check("토큰" in B.locator("#github-status").inner_text(), f"bad token message: {B.locator('#github-status').inner_text()}")
-    B.locator("button[value=cancel]").last.click()
+    B.locator("#settings button[value=cancel]").last.click()
     b.close()
 
 srv.shutdown()

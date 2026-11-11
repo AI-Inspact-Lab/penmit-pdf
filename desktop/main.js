@@ -1,5 +1,5 @@
 // Penmit PDF for Windows and Linux: the web app in an Electron window.
-const { app, BrowserWindow, protocol, net, ipcMain, dialog, shell, safeStorage } = require("electron");
+const { app, BrowserWindow, protocol, net, ipcMain, dialog, shell, safeStorage, nativeTheme } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const http = require("node:http");
@@ -45,7 +45,7 @@ function createWindow() {
     minWidth: 480,
     minHeight: 480,
     title: "Penmit PDF",
-    backgroundColor: "#eef0f4",
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#17181c" : "#ffffff",
     autoHideMenuBar: true,
     icon: path.join(__dirname, "build", "icon.png"),
     webPreferences: {

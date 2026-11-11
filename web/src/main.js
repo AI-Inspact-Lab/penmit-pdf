@@ -1,4 +1,4 @@
-import { t, applyI18n } from "./i18n.js";
+import { t, applyI18n, lang } from "./i18n.js";
 import { db, requestPersistence, sha256Hex } from "./db.js";
 import { Viewer, openPdf, renderThumbnail, isPasswordError, MIN_ZOOM, MAX_ZOOM } from "./viewer.js";
 import { Ink, emptyInk, strokesByPage, PEN_COLORS, HIGHLIGHT_COLORS, WIDTHS } from "./ink.js";
@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -22,6 +22,8 @@ const settings = {
   tool: "pen",
   style: null,
   layout: "single",
+  sort: "recent",
+  lastSync: {},
   github: { owner: "", repo: "", branch: "", token: "" },
   ...readSettings(),
 };
@@ -56,63 +58,237 @@ ink.setTool(settings.tool || "pen");
 let current = null; // { id, doc, bytes }
 
 function show(view) {
+  closeMenu();
   $("#library").hidden = view !== "library";
   $("#reader").hidden = view !== "reader";
 }
 
+// ---------- icons used in menus ----------
+const ICON = {
+  check: '<svg class="i check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  more: '<svg class="i sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10l5 5 5-5"/></svg>',
+  rename: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5l1-4L16 5a2 2 0 0 1 2.8 0l.2.2a2 2 0 0 1 0 2.8L8.5 18.5z"/><path d="M13 20h7"/></svg>',
+  export: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M8 7.5l4-4 4 4"/><path d="M8.5 10.5H6.5a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-8.5a1 1 0 0 0-1-1h-2"/></svg>',
+  trash: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg>',
+};
+
+// ---------- pop-up menus ----------
+let openMenuEl = null;
+let menuAnchor = null;
+function closeMenu() {
+  if (!openMenuEl) return;
+  if (openMenuEl.dataset.dynamic) openMenuEl.remove(); else openMenuEl.hidden = true;
+  menuAnchor?.setAttribute("aria-expanded", "false");
+  openMenuEl = null;
+  menuAnchor = null;
+}
+function showMenu(menu, anchor, point = null) {
+  closeMenu();
+  openMenuEl = menu;
+  menuAnchor = anchor;
+  anchor?.setAttribute("aria-expanded", "true");
+  menu.hidden = false;
+  const r = point ? { left: point.x, right: point.x, top: point.y, bottom: point.y } : anchor.getBoundingClientRect();
+  const w = menu.offsetWidth;
+  const h = menu.offsetHeight;
+  const left = Math.min(Math.max(8, point ? r.left : r.right - w), window.innerWidth - w - 8);
+  let top = r.bottom + 6;
+  if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+function buildMenu(items) {
+  const menu = document.createElement("div");
+  menu.className = "menu";
+  menu.setAttribute("role", "menu");
+  menu.dataset.dynamic = "1";
+  for (const it of items) {
+    if (it === "-") {
+      const sep = document.createElement("div");
+      sep.className = "menu-sep";
+      menu.append(sep);
+      continue;
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `menu-item${it.danger ? " danger" : ""}`;
+    b.setAttribute("role", it.checked === undefined ? "menuitem" : "menuitemradio");
+    if (it.action) b.dataset.action = it.action;
+    b.innerHTML = it.icon || "";
+    const label = document.createElement("span");
+    label.textContent = it.label;
+    b.append(label);
+    if (it.checked !== undefined) {
+      b.setAttribute("aria-checked", String(it.checked));
+      b.insertAdjacentHTML("beforeend", ICON.check);
+    }
+    b.addEventListener("click", () => { closeMenu(); it.run(); });
+    menu.append(b);
+  }
+  menu.hidden = true;
+  document.body.append(menu);
+  return menu;
+}
+function toggleMenu(menuOrItems, anchor) {
+  if (openMenuEl && menuAnchor === anchor) { closeMenu(); return; }
+  showMenu(Array.isArray(menuOrItems) ? buildMenu(menuOrItems) : menuOrItems, anchor);
+}
+document.addEventListener("pointerdown", (e) => {
+  if (openMenuEl && !openMenuEl.contains(e.target) && !menuAnchor?.contains(e.target)) closeMenu();
+}, true);
+window.addEventListener("resize", closeMenu);
+
 // ---------- library ----------
-const PLACEHOLDER = '<svg class="ph i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.8h8l4 4v14.4H6z"/><path d="M14 2.8v4h4"/></svg>';
+const SORTS = {
+  recent: { label: "sortRecent", cmp: (a, b) => (b.openedAt || b.addedAt || 0) - (a.openedAt || a.addedAt || 0) },
+  name: { label: "sortName", cmp: (a, b) => a.name.localeCompare(b.name, lang, { numeric: true, sensitivity: "base" }) },
+  added: { label: "sortAdded", cmp: (a, b) => (b.addedAt || 0) - (a.addedAt || 0) },
+};
+if (!SORTS[settings.sort]) settings.sort = "recent";
+
+function dayLabel(ts) {
+  if (!ts) return "";
+  const d = new Date(ts);
+  const now = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(now) - day(d)) / 86_400_000);
+  if (diff === 0) return t("today");
+  if (diff === 1) return t("yesterday");
+  return t("date", d, d.getFullYear() === now.getFullYear());
+}
+
+function docTile(d) {
+  const li = document.createElement("li");
+  li.className = "doc";
+  li.dataset.id = d.id;
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "doc-open";
+  open.setAttribute("aria-label", d.name);
+  const thumb = document.createElement("div");
+  thumb.className = "doc-thumb";
+  if (d.thumb) {
+    const img = new Image();
+    img.alt = "";
+    img.src = d.thumb;
+    thumb.append(img);
+  } else {
+    thumb.innerHTML = '<div class="ph"></div>';
+  }
+  open.append(thumb);
+  open.addEventListener("click", () => openDoc(d.id));
+
+  const info = document.createElement("div");
+  info.className = "doc-info";
+  const text = document.createElement("div");
+  text.className = "doc-text";
+  const name = document.createElement("p");
+  name.className = "doc-name";
+  name.textContent = d.name;
+  const meta = document.createElement("p");
+  meta.className = "doc-meta";
+  meta.textContent = [dayLabel(d.openedAt || d.addedAt), d.pageCount ? t("pages", d.pageCount) : ""].filter(Boolean).join(" · ");
+  text.append(name, meta);
+  text.addEventListener("click", () => openDoc(d.id));
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "doc-more";
+  more.setAttribute("aria-haspopup", "menu");
+  more.setAttribute("aria-expanded", "false");
+  more.setAttribute("aria-label", `${t("more")}: ${d.name}`);
+  more.innerHTML = ICON.more;
+  more.addEventListener("click", () => toggleMenu(docMenuItems(d), more));
+  info.append(text, more);
+  li.append(open, info);
+  li.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    showMenu(buildMenu(docMenuItems(d)), more, { x: e.clientX, y: e.clientY });
+  });
+  return li;
+}
+
+function docMenuItems(d) {
+  return [
+    { label: t("rename"), icon: ICON.rename, action: "rename", run: () => renameDoc(d) },
+    { label: t("exportDoc"), icon: ICON.export, action: "export", run: () => exportDoc(d.id) },
+    "-",
+    { label: t("deleteDoc"), icon: ICON.trash, action: "delete", danger: true, run: () => deleteDoc(d) },
+  ];
+}
 
 async function renderLibrary() {
-  const docs = (await db.getAll("docs"))
-    .filter((d) => !d.deleted)
-    .sort((a, b) => (b.openedAt || b.addedAt || 0) - (a.openedAt || a.addedAt || 0));
+  const all = (await db.getAll("docs")).filter((d) => !d.deleted);
+  const query = $("#search").value.trim();
+  const q = query.toLowerCase();
+  const docs = all.filter((d) => !q || d.name.toLowerCase().includes(q)).sort(SORTS[settings.sort].cmp);
   const list = $("#doc-list");
-  list.textContent = "";
-  $("#lib-empty").hidden = docs.length > 0;
-  for (const d of docs) {
-    const li = document.createElement("li");
-    li.className = "doc";
-    li.dataset.id = d.id;
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "doc-open";
-    const thumb = document.createElement("div");
-    thumb.className = "doc-thumb";
-    if (d.thumb) {
-      const img = new Image();
-      img.alt = "";
-      img.src = d.thumb;
-      thumb.append(img);
-    } else {
-      thumb.innerHTML = PLACEHOLDER;
-    }
-    const name = document.createElement("p");
-    name.className = "doc-name";
-    name.textContent = d.name;
-    const meta = document.createElement("p");
-    meta.className = "doc-meta";
-    meta.textContent = d.pageCount ? t("pages", d.pageCount) : "";
-    if (d.synced) {
-      const s = document.createElement("span");
-      s.className = "synced";
-      s.textContent = `· ${t("synced")}`;
-      meta.append(" ", s);
-    }
-    open.append(thumb, name, meta);
-    open.addEventListener("click", () => openDoc(d.id));
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "doc-del";
-    del.setAttribute("aria-label", `${t("deleteDoc")}: ${d.name}`);
-    del.title = t("deleteDoc");
-    del.innerHTML = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg>';
-    del.addEventListener("click", () => deleteDoc(d));
-    li.append(open, del);
-    list.append(li);
-  }
+  list.querySelectorAll(".doc").forEach((el) => el.remove());
+  const empty = all.length === 0;
+  $("#lib-empty").hidden = !empty;
+  list.hidden = empty;
+  $("#lib-tools").hidden = empty;
+  $("#empty-sync").hidden = !storageReady();
+  $("#no-results").hidden = empty || docs.length > 0;
+  if (!empty && !docs.length) $("#no-results").textContent = t("noResults", query);
+  $("#sort-label").textContent = t(SORTS[settings.sort].label);
+  for (const d of docs) list.append(docTile(d));
   for (const d of docs) if (!d.thumb) ensureThumb(d);
 }
+
+$("#search").addEventListener("input", () => renderLibrary());
+$("#sort-btn").addEventListener("click", () => toggleMenu(Object.entries(SORTS).map(([key, s]) => ({
+  label: t(s.label),
+  checked: settings.sort === key,
+  run: () => { settings.sort = key; saveSettings(); renderLibrary(); },
+})), $("#sort-btn")));
+$("#lib-main").addEventListener("scroll", (e) => {
+  $(".lib-header").classList.toggle("scrolled", e.target.scrollTop > 2);
+}, { passive: true });
+
+// Where the library is synced, and when it last was.
+function agoLabel(ts) {
+  const min = Math.floor((Date.now() - ts) / 60_000);
+  if (min < 1) return t("lineJustNow");
+  if (min < 60) return t("lineMinutes", min);
+  const h = Math.floor(min / 60);
+  if (h < 24) return t("lineHours", h);
+  return t("lineDate", dayLabel(ts));
+}
+function updateSyncLine() {
+  const el = $("#sync-line");
+  if (!storageReady()) {
+    el.textContent = t("lineNone");
+    el.dataset.state = "off";
+    return;
+  }
+  const where = settings.storage === "gdrive" ? t("lineDrive") : `${t("lineGitHub")} · ${settings.github.owner}/${settings.github.repo}`;
+  const last = settings.lastSync?.[settings.storage];
+  el.dataset.state = last ? "ok" : "never";
+  el.textContent = `${where} · ${last ? agoLabel(last) : t("lineNever")}`;
+}
+setInterval(updateSyncLine, 60_000);
+
+const renameDialog = $("#rename");
+const renameInput = $("#rename-form").elements.namedItem("name");
+let renaming = null;
+function renameDoc(d) {
+  renaming = d;
+  renameInput.value = d.name;
+  renameDialog.returnValue = "";
+  renameDialog.showModal();
+  const dot = d.name.toLowerCase().endsWith(".pdf") ? d.name.length - 4 : d.name.length;
+  renameInput.setSelectionRange(0, dot);
+}
+renameDialog.addEventListener("close", async () => {
+  const d = renaming;
+  renaming = null;
+  const name = renameInput.value.trim();
+  if (renameDialog.returnValue !== "ok" || !d || !name || name === d.name) return;
+  const fresh = (await db.get("docs", d.id)) || d;
+  await db.put("docs", { ...fresh, name, updatedAt: Date.now() });
+  await renderLibrary();
+  toast(t("renamed"));
+});
 
 async function ensureThumb(d) {
   const file = await db.get("files", d.id);
@@ -194,6 +370,7 @@ async function openDoc(id) {
   syncLayoutButtons();
   syncZoomLabel();
   syncPageIndicator(viewer.currentPage());
+  flashPageIndicator();
   syncHistoryButtons();
   await db.put("docs", { ...d, openedAt: Date.now(), pageCount: d.pageCount || pdf.numPages });
 }
@@ -234,12 +411,22 @@ function syncHistoryButtons() {
 }
 
 function syncLayoutButtons() {
-  for (const b of document.querySelectorAll("[data-layout]")) b.setAttribute("aria-pressed", String(b.dataset.layout === viewer.layout));
+  for (const b of document.querySelectorAll("[data-layout]")) b.setAttribute("aria-checked", String(b.dataset.layout === viewer.layout));
 }
 function syncZoomLabel() { $("#zoom-fit").textContent = `${Math.round(viewer.zoom * 100)}%`; }
 function syncPageIndicator(i) { $("#page-ind").textContent = viewer.pages.length ? `${i + 1} / ${viewer.pages.length}` : ""; }
 
-viewer.addEventListener("pagechange", (e) => syncPageIndicator(e.detail));
+// The page number shows while the pages move, then fades.
+let pageIndTimer = 0;
+function flashPageIndicator() {
+  const el = $("#page-ind");
+  el.classList.add("show");
+  clearTimeout(pageIndTimer);
+  pageIndTimer = setTimeout(() => el.classList.remove("show"), 1400);
+}
+viewer.addEventListener("pagechange", (e) => { syncPageIndicator(e.detail); flashPageIndicator(); });
+$("#scroller").addEventListener("scroll", flashPageIndicator, { passive: true });
+$("#view-btn").addEventListener("click", () => toggleMenu($("#view-menu"), $("#view-btn")));
 viewer.addEventListener("zoom", syncZoomLabel);
 
 for (const b of document.querySelectorAll("[data-layout]")) {
@@ -248,6 +435,7 @@ for (const b of document.querySelectorAll("[data-layout]")) {
     settings.layout = b.dataset.layout;
     saveSettings();
     syncLayoutButtons();
+    closeMenu();
   });
 }
 const ZOOM_STEP = 1.25;
@@ -268,7 +456,8 @@ function renderToolbar() {
   bar.classList.toggle("hand-mode", tool === "hand");
   const kind = tool === "highlighter" ? "highlighter" : "pen";
   const style = ink.style[kind];
-  bar.style.setProperty("--hl", ink.style.highlighter.color);
+  $("[data-tool=pen] .tool-color").style.setProperty("--c", ink.style.pen.color);
+  $("[data-tool=highlighter] .tool-color").style.setProperty("--c", ink.style.highlighter.color);
 
   const swatches = $("#swatches");
   swatches.textContent = "";
@@ -279,9 +468,8 @@ function renderToolbar() {
     b.setAttribute("role", "radio");
     b.setAttribute("aria-checked", String(color === style.color));
     b.setAttribute("aria-label", color);
-    const dot = document.createElement("span");
-    dot.style.background = color;
-    b.append(dot);
+    b.style.setProperty("--c", color);
+    b.append(document.createElement("span"));
     b.addEventListener("click", () => { style.color = color; persistStyle(); renderToolbar(); });
     swatches.append(b);
   }
@@ -318,10 +506,19 @@ for (const b of document.querySelectorAll("[data-tool]")) b.addEventListener("cl
 async function exportCurrent() {
   if (!current) return;
   await flushInk();
+  await exportPdf(current.bytes, ink.model, current.doc.name);
+}
+async function exportDoc(id) {
+  const d = await db.get("docs", id);
+  const file = await db.get("files", id);
+  if (!d || !file) return;
+  await exportPdf(file.bytes, (await db.get("ink", id)) || emptyInk(id), d.name);
+}
+async function exportPdf(pdfBytes, model, name) {
   toast(t("exporting"), { ms: 60_000 });
   try {
-    const bytes = await exportAnnotated(current.bytes, strokesByPage(ink.model));
-    const base = current.doc.name.replace(/\.pdf$/i, "");
+    const bytes = await exportAnnotated(pdfBytes, strokesByPage(model));
+    const base = name.replace(/\.pdf$/i, "");
     const saved = await saveFile(`${base} (Penmit).pdf`, bytes);
     if (saved !== false) toast(t("exported")); else $("#toast").hidden = true;
   } catch (e) {
@@ -390,6 +587,9 @@ async function runSync({ quiet = false } = {}) {
     await flushInk();
     const stats = await sync(backend, store);
     inkDirty = false;
+    settings.lastSync = { ...settings.lastSync, [settings.storage]: Date.now() };
+    saveSettings();
+    updateSyncLine();
     if (!quiet || stats.down || stats.merged) toast(t("syncDone", stats));
     if (!current) await renderLibrary();
   } catch (e) {
@@ -419,7 +619,7 @@ async function refreshGoogleStatus() {
   $("#gdrive-unavailable").textContent = isAndroidApp ? t("driveUnavailableAndroid") : t("driveUnavailableDesktop");
   $("#gdrive-actions").hidden = !available;
   if (!available) return;
-  status.className = "status";
+  status.classList.remove("ok", "bad");
   const signedIn = await googleAuth.signedIn();
   $("#google-sign-in").hidden = signedIn;
   $("#google-sign-out").hidden = !signedIn;
@@ -442,7 +642,7 @@ function openSettings() {
   form.storage.value = settings.storage;
   form.fingerDraw.checked = settings.fingerDraw;
   $("#github-status").textContent = "";
-  $("#version").textContent = t("version", VERSION);
+  $("#version").textContent = VERSION;
   showStoragePanels();
   dialog.showModal();
 }
@@ -460,17 +660,20 @@ dialog.addEventListener("close", () => {
   settings.fingerDraw = form.fingerDraw.checked;
   ink.setFingerDraw(settings.fingerDraw);
   saveSettings();
+  updateSyncLine();
+  if (!current) renderLibrary();
   toast(t("saved"));
 });
 
 // Google: sign in straight from the click (browsers only allow pop-ups that a click opens).
 $("#google-sign-in").addEventListener("click", () => {
   const status = $("#gdrive-status");
-  status.className = "status";
+  status.classList.remove("ok", "bad");
   status.textContent = t("googleSigningIn");
   googleAuth.signIn({ after: "settings" }).then(() => {
     settings.storage = "gdrive";
     saveSettings();
+    updateSyncLine();
     refreshGoogleStatus();
   }).catch((e) => {
     status.textContent = t("googleSignInFailed", e.message);
@@ -484,7 +687,7 @@ $("#google-sign-out").addEventListener("click", async () => {
 $("#test-github").addEventListener("click", async () => {
   const status = $("#github-status");
   const g = { owner: form.owner.value, repo: form.repo.value, branch: form.branch.value, token: form.token.value };
-  status.className = "status";
+  status.classList.remove("ok", "bad");
   if (!g.owner.trim() || !g.repo.trim() || !g.token.trim()) { status.textContent = t("ghMissing"); status.classList.add("bad"); return; }
   status.textContent = t("ghChecking");
   try {
@@ -500,6 +703,8 @@ $("#test-github").addEventListener("click", async () => {
 // ---------- opening files ----------
 const input = $("#file-input");
 $("#open-pdf").addEventListener("click", () => input.click());
+$("#empty-open").addEventListener("click", () => input.click());
+$("#empty-sync").addEventListener("click", () => runSync());
 input.addEventListener("change", () => { if (input.files.length) importFiles(input.files); input.value = ""; });
 
 let dragDepth = 0;
@@ -524,7 +729,8 @@ window.penmitDesktop?.onOpenFiles?.((files) => {
 
 // ---------- keyboard ----------
 document.addEventListener("keydown", (e) => {
-  if (!current || dialog.open || e.target.closest?.("input, textarea")) return;
+  if (e.key === "Escape" && openMenuEl) { closeMenu(); return; }
+  if (!current || dialog.open || renameDialog.open || e.target.closest?.("input, textarea")) return;
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
   if (mod && k === "z") { e.preventDefault(); if (e.shiftKey) ink.redo(); else ink.undo(); }
@@ -558,12 +764,14 @@ function start() {
   }
   renderToolbar();
   show("library");
+  updateSyncLine();
   renderLibrary();
   registerServiceWorker();
   if (back?.redirect) {
     if (back.ok) {
       settings.storage = "gdrive";
       saveSettings();
+      updateSyncLine();
       if (back.after === "settings") openSettings();
     } else {
       toast(t("googleSignInFailed", "access_denied"), { error: true });
