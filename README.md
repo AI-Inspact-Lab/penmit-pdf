@@ -1,8 +1,8 @@
 # Penmit PDF (팬밋 PDF)
 
-어느 기기에서든 PDF를 보고, 펜으로 필기하고, **내 GitHub 저장소**에 보관하는 무료 앱
+어느 기기에서든 PDF를 보고, 펜으로 필기하고, **내 구글 드라이브나 GitHub**에 보관하는 무료 앱
 <br>
-Read and handwrite on PDFs on any device, and keep them in **your own GitHub repository**.
+Read and handwrite on PDFs on any device, and keep them in **your own Google Drive or GitHub**.
 
 [한국어](#한국어) · [English](#english) · [다운로드 · Download](https://github.com/AI-Inspact-Lab/penmit-pdf/releases) · [웹에서 열기 · Open in the browser](https://ai-inspact-lab.github.io/penmit-pdf/)
 
@@ -12,13 +12,13 @@ Read and handwrite on PDFs on any device, and keep them in **your own GitHub rep
 
 ### 왜 만들었나
 
-태블릿 필기 앱은 기기마다 따로 놀아요. 아이패드에서 쓴 필기를 갤럭시탭이나 윈도우에서 이어서 보려면 유료 클라우드에 가입해야 하는 경우가 많아요. 팬밋 PDF는 **서버가 없어요.** 필기는 각자의 GitHub 저장소에 저장되니 운영 비용이 들지 않고, 데이터는 온전히 내 것이에요.
+태블릿 필기 앱은 기기마다 따로 놀아요. 아이패드에서 쓴 필기를 갤럭시탭이나 윈도우에서 이어서 보려면 유료 클라우드에 가입해야 하는 경우가 많아요. 팬밋 PDF는 **서버가 없어요.** 필기는 각자의 구글 드라이브나 GitHub 저장소에 저장되니 운영 비용이 들지 않고, 데이터는 온전히 내 것이에요.
 
 ### 핵심 기능
 
 1. **PDF 보기:** 한쪽 보기, 두쪽 보기, 표지 따로 두쪽 보기. 확대·축소와 두 손가락 핀치를 지원해요.
 2. **필기:** 펜, 형광펜, 지우개를 쓸 수 있어요. 애플펜슬, 갤럭시 S펜, 서피스펜, 와콤처럼 브라우저가 인식하는 펜이면 필압까지 받아요. 펜으로 쓰는 동안 손바닥 터치는 무시해요.
-3. **GitHub 동기화:** 내 비공개 저장소에 PDF와 필기를 올리고, 다른 기기에서 받아요. 두 기기에서 따로 쓴 필기도 자동으로 합쳐요.
+3. **동기화:** 내 구글 드라이브나 GitHub 비공개 저장소에 PDF와 필기를 올리고, 다른 기기에서 받아요. 두 기기에서 따로 쓴 필기도 자동으로 합쳐요.
 
 내보내기를 하면 필기가 **PDF 표준 잉크 주석**으로 들어간 PDF가 만들어져요. 아크로뱃, 맥 미리보기, 브라우저 같은 다른 PDF 프로그램에서도 그대로 보여요.
 
@@ -34,21 +34,45 @@ Read and handwrite on PDFs on any device, and keep them in **your own GitHub rep
 
 윈도우에서 처음 실행할 때 "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**을 누르세요. 유료 코드 서명 인증서를 쓰지 않아서 생기는 안내예요.
 
-### GitHub 동기화 설정 (한 번만)
+### 저장 위치 고르기
+
+**설정 → 저장·동기화**에서 고르세요. 기기마다 같은 곳을 고르면 서로 이어져요.
+
+| 저장 위치 | 이런 분께 | 준비물 |
+| --- | --- | --- |
+| **구글 드라이브** | 대부분의 사람 | 구글 계정 (로그인만 하면 끝) |
+| **GitHub** | 개발자, 변경 이력까지 남기고 싶은 사람 | GitHub 계정, 비공개 저장소, 토큰 |
+| 이 기기에만 | 한 기기에서만 쓰는 사람 | 없음 |
+
+### 구글 드라이브 (가장 쉬워요)
+
+1. **설정 → 저장·동기화 → 구글 드라이브**를 고르고 **Google 계정으로 로그인**을 눌러요.
+2. 구글 화면에서 계정을 고르고 허용하면 끝이에요. **저장**을 누르고 **동기화**하세요.
+3. 다른 기기에서도 같은 계정으로 로그인하면 돼요.
+
+- 내 드라이브에 `Penmit PDF` 폴더가 생기고 그 안에 저장돼요.
+- 앱은 **자기가 만든 파일만** 볼 수 있어요(`drive.file` 권한). 드라이브의 다른 파일은 볼 수 없어요.
+- 앱에서 PDF를 지우면 드라이브에서는 **휴지통**으로 가요. 실수로 지워도 30일 안에 되살릴 수 있어요.
+- 웹앱은 보안상 한 시간쯤 지나면 다시 로그인하라고 할 수 있어요. 윈도우·리눅스 앱은 로그인을 기억해요.
+- **안드로이드 앱은 아직 구글 드라이브를 지원하지 않아요.** 그동안은 GitHub을 쓰거나, 크롬에서 웹앱을 열어 구글 드라이브를 쓰세요.
+
+### GitHub (개발자용)
 
 1. GitHub에서 **비공개(Private)** 저장소를 하나 만들어요. 예: `penmit-notes`
 2. [Fine-grained 토큰](https://github.com/settings/personal-access-tokens/new)을 만들어요.
    - Repository access: **Only select repositories** → 방금 만든 저장소
    - Permissions → Repository permissions → **Contents: Read and write**
-3. 팬밋 PDF의 **설정**에 소유자(내 GitHub 아이디), 저장소 이름, 토큰을 넣고 **연결 확인** → **저장**
+3. 팬밋 PDF의 **설정 → 저장·동기화 → GitHub**을 고르고 소유자(내 GitHub 아이디), 저장소 이름, 토큰을 넣은 뒤 **연결 확인** → **저장**
 4. **동기화**를 누르면 끝이에요. 다른 기기에서도 같은 저장소와 토큰을 넣으면 돼요.
 
-저장소에는 이렇게 저장돼요.
+### 어떻게 저장되나
+
+구글 드라이브는 `Penmit PDF/` 폴더 아래, GitHub은 `penmit/` 폴더 아래에 같은 모양으로 저장돼요.
 
 ```
-penmit/<PDF의 SHA-256>/document.pdf   원본 PDF (한 번만 올림)
-penmit/<PDF의 SHA-256>/meta.json      파일 이름, 쪽수
-penmit/<PDF의 SHA-256>/ink.json       필기 (작은 텍스트 파일)
+<PDF의 SHA-256>/document.pdf   원본 PDF (한 번만 올림)
+<PDF의 SHA-256>/meta.json      파일 이름, 쪽수
+<PDF의 SHA-256>/ink.json       필기 (작은 텍스트 파일)
 ```
 
 필기는 원본 PDF와 따로 저장해서, 필기할 때마다 큰 PDF를 다시 올리지 않아요. 문서를 닫을 때 바뀐 게 있으면 자동으로 동기화해요.
@@ -61,12 +85,14 @@ penmit/<PDF의 SHA-256>/ink.json       필기 (작은 텍스트 파일)
 
 ### 개인정보
 
-- 서버가 없어요. PDF와 필기는 기기 안(IndexedDB)과 내 GitHub 저장소에만 있어요.
-- 토큰은 그 기기의 브라우저 저장소에만 보관돼요. 공용 컴퓨터에서는 쓰지 마세요.
-- 토큰은 저장소 하나, Contents 권한 하나만 주세요. 유출되더라도 그 저장소 밖으로는 영향이 없어요.
+- 서버가 없어요. PDF와 필기는 기기 안(IndexedDB)과 내가 고른 구글 드라이브나 GitHub 저장소에만 있어요. 개발자는 아무것도 받지 않아요.
+- 로그인 정보와 토큰은 그 기기에만 보관돼요. 공용 컴퓨터에서는 쓰지 마세요.
+- GitHub 토큰은 저장소 하나, Contents 권한 하나만 주세요. 유출되더라도 그 저장소 밖으로는 영향이 없어요.
+- 자세한 내용: [개인정보처리방침](https://ai-inspact-lab.github.io/penmit-pdf/privacy.html)
 
-### 베타 안내 (0.1.0)
+### 베타 안내 (0.2.0)
 
+- 안드로이드 앱에서는 아직 구글 드라이브를 쓸 수 없어요.
 - 암호가 걸린 PDF는 아직 열 수 없어요.
 - 내보낸 PDF를 다시 열면 필기가 보이기는 하지만, 지우거나 고칠 수는 없어요.
 - 글자 입력, 도형, 페이지 추가는 아직 없어요.
@@ -77,13 +103,13 @@ penmit/<PDF의 SHA-256>/ink.json       필기 (작은 텍스트 파일)
 
 ### Why
 
-Handwriting apps keep your notes inside their own cloud. Penmit PDF has **no server**: your PDFs and notes live on your devices and in a GitHub repository you own, so it costs nothing to run and the data stays yours.
+Handwriting apps keep your notes inside their own cloud. Penmit PDF has **no server**: your PDFs and notes live on your devices and in your own Google Drive or GitHub repository, so it costs nothing to run and the data stays yours.
 
 ### Features
 
 1. **Read PDFs:** single page, two pages, or cover plus two pages; zoom and two-finger pinch.
 2. **Handwrite:** pen, highlighter and eraser, with pressure from Apple Pencil, Galaxy S Pen, Surface Pen, Wacom and any other pen the browser sees. Palm touches are ignored while the pen writes.
-3. **Sync through GitHub:** PDFs and notes go to your private repository and come back on your other devices. Notes written on two devices at once are merged.
+3. **Sync:** PDFs and notes go to your Google Drive or a private GitHub repository and come back on your other devices. Notes written on two devices at once are merged.
 
 **Export** writes the notes into a copy of the PDF as standard ink annotations, which Acrobat, Preview, browsers and other PDF readers show as drawn.
 
@@ -99,18 +125,23 @@ Handwriting apps keep your notes inside their own cloud. Penmit PDF has **no ser
 
 On first launch Windows may show "Windows protected your PC": choose **More info → Run anyway**. The installer is not signed with a paid certificate.
 
-### Set up GitHub sync (once)
+### Choose where to sync
 
-1. Create a **private** repository, e.g. `penmit-notes`.
-2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only that repository** and **Contents: Read and write**.
-3. In Penmit PDF, open **Settings**, enter the owner, repository and token, choose **Test connection**, then **Save**.
-4. Press **Sync**. Use the same repository and token on your other devices.
+Pick one in **Settings → Storage and sync**, and pick the same one on each device.
 
-Each PDF is stored as `penmit/<sha256>/document.pdf` (uploaded once), `meta.json` and `ink.json` (the notes, as small text). Closing a document syncs it if anything changed.
+- **Google Drive** (easiest): choose **Sign in with Google**, allow access, **Save**, then **Sync**. Sign in with the same account on your other devices. Files go into a `Penmit PDF` folder in your Drive. The app asks only for the `drive.file` permission, so it sees nothing but the files it created. PDFs deleted in the app go to Drive's bin. The web app may ask you to sign in again after about an hour; the Windows and Linux apps remember the sign-in. **The Android app doesn't support Google Drive yet**: use GitHub there, or the web app in Chrome.
+- **GitHub** (for developers):
+  1. Create a **private** repository, e.g. `penmit-notes`.
+  2. Create a [fine-grained token](https://github.com/settings/personal-access-tokens/new) with access to **only that repository** and **Contents: Read and write**.
+  3. In **Settings → Storage and sync**, choose **GitHub**, enter the owner, repository and token, choose **Test connection**, then **Save**.
+  4. Press **Sync**. Use the same repository and token on your other devices.
+- **This device only**: no sync.
+
+Each PDF is stored as `<sha256>/document.pdf` (uploaded once), `meta.json` and `ink.json` (the notes, as small text), under `Penmit PDF/` in Drive or `penmit/` in the repository. Closing a document syncs it if anything changed.
 
 ### Privacy
 
-No server is involved. Data stays in the device's IndexedDB and in your repository. The token is kept only in that device's browser storage, so don't use it on a shared computer, and limit it to one repository with Contents permission.
+No server is involved, and the developer receives nothing. Data stays in the device's IndexedDB and in the Google Drive or repository you chose. Sign-in data and tokens are kept only on that device, so don't use them on a shared computer, and limit a GitHub token to one repository with Contents permission. See the [privacy policy](https://ai-inspact-lab.github.io/penmit-pdf/privacy.html).
 
 ---
 
@@ -130,6 +161,14 @@ python3 -m http.server -d web 8000      # then open http://localhost:8000
 | All apps for a release | `.github/workflows/release.yml` | runs when a GitHub Release is published and attaches the files |
 
 Tests are in [`tests/`](tests/README.md).
+
+### Google sign-in
+
+Google Drive sync uses two OAuth clients from the project's Google Cloud console, both limited to the `drive.file` scope.
+
+- **Web** (`web/src/config.js`): a public client ID, which Google accepts only from the authorised origins set in the console. Forks need their own client ID.
+- **Desktop** (Windows, Linux): an installed-app client used with the system browser, a loopback redirect and PKCE. Its ID and secret are **never committed**. The release workflow writes them into `desktop/google-oauth.json` from the repository secrets `GOOGLE_DESKTOP_CLIENT_ID` and `GOOGLE_DESKTOP_CLIENT_SECRET`; builds without them simply hide Google Drive. For local runs, create that file yourself (it is git-ignored): `{"client_id": "...", "client_secret": "..."}`.
+- **Android**: Google doesn't allow sign-in inside app web views, so this needs a native sign-in (planned).
 
 ## License
 

@@ -1,5 +1,5 @@
 // Small differences between the web app, the desktop app (Electron) and the Android app (Capacitor).
-import { bytesToBase64 } from "./github.js";
+import { bytesToBase64 } from "./sync.js";
 
 export const isDesktop = typeof window.penmitDesktop === "object";
 export const isAndroidApp = typeof window.Capacitor === "object" && /android/i.test(navigator.userAgent);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data: blob:; connect-src 'self' https://api.github.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; font-src 'self' data: blob:; connect-src 'self' https://api.github.com https://www.googleapis.com https://oauth2.googleapis.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'">
 <meta name="theme-color" content="#eef0f4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16191f" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -132,6 +132,26 @@
     </header>
 
     <section class="field-group">
+      <h3 data-i18n="storage"></h3>
+      <div class="storage-choice" role="radiogroup" data-i18n-label="storage">
+        <label class="choice"><input type="radio" name="storage" value="none"><span><b data-i18n="storageNone"></b><small data-i18n="storageNoneHint"></small></span></label>
+        <label class="choice"><input type="radio" name="storage" value="gdrive"><span><b data-i18n="storageDrive"></b><small data-i18n="storageDriveHint"></small></span></label>
+        <label class="choice"><input type="radio" name="storage" value="github"><span><b data-i18n="storageGitHub"></b><small data-i18n="storageGitHubHint"></small></span></label>
+      </div>
+    </section>
+
+    <section class="field-group" id="gdrive-panel" hidden>
+      <h3 data-i18n="storageDrive"></h3>
+      <p class="hint" data-i18n="driveIntro"></p>
+      <p class="hint warn" id="gdrive-unavailable" hidden></p>
+      <div class="row" id="gdrive-actions">
+        <button class="btn primary" type="button" id="google-sign-in" data-i18n="googleSignIn"></button>
+        <button class="btn" type="button" id="google-sign-out" hidden data-i18n="googleSignOut"></button>
+        <span class="status" id="gdrive-status" role="status"></span>
+      </div>
+    </section>
+
+    <section class="field-group" id="github-panel" hidden>
       <h3 data-i18n="githubStorage"></h3>
       <p class="hint" data-i18n="githubIntro"></p>
       <label class="field"><span data-i18n="owner"></span><input name="owner" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="my-github-id"></label>
@@ -153,7 +173,7 @@
     </section>
 
     <footer class="sheet-foot">
-      <span class="version" id="version"></span>
+      <span class="version"><span id="version"></span><br><a href="https://ai-inspact-lab.github.io/penmit-pdf/privacy.html" target="_blank" rel="noopener" data-i18n="privacy"></a></span>
       <div class="spacer"></div>
       <button class="btn" value="cancel" type="submit" data-i18n="cancel"></button>
       <button class="btn primary" value="save" type="submit" data-i18n="save"></button>

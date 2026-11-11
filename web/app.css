@@ -210,6 +210,15 @@ a { color: var(--accent); }
   min-height: 44px; padding: 0 .75rem; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
 }
 .field input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+.storage-choice { display: grid; gap: .5rem; margin-top: .4rem; }
+.choice {
+  display: flex; align-items: flex-start; gap: .7rem; padding: .7rem .8rem; border: 1px solid var(--line);
+  border-radius: 12px; cursor: pointer; background: var(--surface);
+}
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choice input { width: 20px; height: 20px; margin: .1rem 0 0; accent-color: var(--accent); flex: none; }
+.choice span { display: grid; gap: .1rem; }
+.choice small { color: var(--muted); font-size: .84rem; }
 .check { display: flex; align-items: center; gap: .6rem; min-height: 44px; font-weight: 600; }
 .check input { width: 22px; height: 22px; accent-color: var(--accent); }
 .hint { margin: .3rem 0; color: var(--muted); font-size: .86rem; }
@@ -219,4 +228,6 @@ a { color: var(--accent); }
 .status.ok { color: #1f8a4c; }
 .status.bad { color: var(--danger); }
 .sheet-foot { display: flex; align-items: center; gap: .5rem; padding: 12px 20px 16px; border-top: 1px solid var(--line); }
-.version { color: var(--muted); font-size: .8rem; }
+.version { color: var(--muted); font-size: .8rem; line-height: 1.5; }
+.version a { color: inherit; }
+#gdrive-actions { margin-top: .75rem; }

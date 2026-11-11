@@ -9,6 +9,9 @@
 #   ANDROID_KEY_ALIAS         key alias
 #   ANDROID_KEY_PASSWORD      key password
 # Without them a debug-signed APK is built; it installs fine but cannot update an earlier one.
+#
+# Google Drive in the desktop app: add GOOGLE_DESKTOP_CLIENT_ID and GOOGLE_DESKTOP_CLIENT_SECRET
+# (the "Desktop app" OAuth client). They are written into the desktop build only.
 name: Build apps
 
 on:
@@ -55,11 +58,20 @@ jobs:
         working-directory: desktop
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          GOOGLE_DESKTOP_CLIENT_ID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
         run: |
           npm install --no-audit --no-fund
           npm version "$VERSION" --no-git-tag-version --allow-same-version
           rm -rf app && cp -r ../web app && rm -f app/sw.js
+          # Google sign-in for the desktop app comes from repository secrets, never from the repository.
+          if [ -n "$GOOGLE_DESKTOP_CLIENT_ID" ] && [ -n "$GOOGLE_DESKTOP_CLIENT_SECRET" ]; then
+            node -e 'require("fs").writeFileSync("google-oauth.json", JSON.stringify({ client_id: process.env.GOOGLE_DESKTOP_CLIENT_ID, client_secret: process.env.GOOGLE_DESKTOP_CLIENT_SECRET }))'
+          else
+            echo "::warning::No Google desktop client secrets: Google Drive will be unavailable in the desktop app."
+          fi
           npx electron-builder --publish never
+          rm -f google-oauth.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: desktop-${{ matrix.os }}

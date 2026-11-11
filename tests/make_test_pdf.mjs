@@ -15,4 +15,13 @@ for (let i = 1; i <= 6; i++) {
 }
 mkdirSync(new URL("./out/", import.meta.url), { recursive: true });
 writeFileSync(new URL("./out/test.pdf", import.meta.url), await doc.save());
-console.log("tests/out/test.pdf written");
+
+// tests/out/big.pdf: one page plus 5 MB of unused random data, to exercise large uploads.
+const big = await PDFDocument.create();
+const bigFont = await big.embedFont(StandardFonts.Helvetica);
+big.addPage([612, 792]).drawText("Big file", { x: 60, y: 700, size: 28, font: bigFont });
+const noise = new Uint8Array(5 * 1024 * 1024);
+for (let i = 0; i < noise.length; i += 65536) crypto.getRandomValues(noise.subarray(i, i + 65536));
+big.context.register(big.context.stream(noise));
+writeFileSync(new URL("./out/big.pdf", import.meta.url), await big.save({ useObjectStreams: false }));
+console.log("tests/out/test.pdf and tests/out/big.pdf written");

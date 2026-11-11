@@ -1,5 +1,5 @@
-// Offline support for the web app: the app itself is cached; GitHub API calls always go to the network.
-const VERSION = "penmit-0.1.0";
+// Offline support for the web app: the app itself is cached; Google Drive and GitHub calls always go to the network.
+const VERSION = "penmit-0.2.0";
 const CORE = [
   "./",
   "index.html",
@@ -15,6 +15,10 @@ const CORE = [
   "src/ink.js",
   "src/export.js",
   "src/github.js",
+  "src/gdrive.js",
+  "src/googleauth.js",
+  "src/sync.js",
+  "src/config.js",
   "src/platform.js",
   "vendor/pdfjs/pdf.min.mjs",
   "vendor/pdfjs/pdf.worker.min.mjs",

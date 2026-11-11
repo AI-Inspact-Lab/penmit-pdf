@@ -146,6 +146,7 @@ def device(browser, name):
 
 def configure(page, repo="notes"):
     page.locator("#lib-settings").click()
+    page.locator("input[name=storage][value=github]").check()
     page.fill("input[name=owner]", "me")
     page.fill("input[name=repo]", repo)
     page.fill("input[name=token]", "testtoken")

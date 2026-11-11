@@ -1,8 +1,8 @@
 {
   "name": "penmit-pdf",
   "productName": "Penmit PDF",
-  "version": "0.1.0",
-  "description": "Read and handwrite on PDFs, synced through your own GitHub repository.",
+  "version": "0.2.0",
+  "description": "Read and handwrite on PDFs, synced through your own Google Drive or GitHub.",
   "homepage": "https://github.com/AI-Inspact-Lab/penmit-pdf",
   "author": {
     "name": "AI-Inspact-Lab",
@@ -30,6 +30,7 @@
       "main.js",
       "preload.js",
       "package.json",
+      "google-oauth.json",
       "app/**/*",
       "build/icon.png"
     ],
@@ -60,7 +61,7 @@
     "linux": {
       "target": ["AppImage", "deb"],
       "category": "Office",
-      "synopsis": "PDF reader with handwriting, synced through GitHub",
+      "synopsis": "PDF reader with handwriting, synced through Google Drive or GitHub",
       "artifactName": "Penmit-PDF-${version}-${arch}.${ext}"
     },
     "publish": null

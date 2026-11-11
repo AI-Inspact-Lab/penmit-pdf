@@ -3,10 +3,13 @@ import { db, requestPersistence, sha256Hex } from "./db.js";
 import { Viewer, openPdf, renderThumbnail, isPasswordError, MIN_ZOOM, MAX_ZOOM } from "./viewer.js";
 import { Ink, emptyInk, strokesByPage, PEN_COLORS, HIGHLIGHT_COLORS, WIDTHS } from "./ink.js";
 import { exportAnnotated, EncryptedPdfError } from "./export.js";
-import { GitHub, sync, mergeInk, sameInk } from "./github.js";
-import { saveFile, registerServiceWorker } from "./platform.js";
+import { GitHub, GitHubBackend } from "./github.js";
+import { DriveBackend } from "./gdrive.js";
+import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
+import { sync, mergeInk, sameInk } from "./sync.js";
+import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.1.0";
+export const VERSION = "0.2.0";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -25,7 +28,10 @@ const settings = {
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* storage unavailable */ }
 }
-const githubReady = () => Boolean(settings.github.owner && settings.github.repo && settings.github.token);
+const githubComplete = () => Boolean(settings.github.owner && settings.github.repo && settings.github.token);
+// Where to sync: "none", "gdrive" or "github" (older settings had only GitHub).
+if (!settings.storage) settings.storage = githubComplete() ? "github" : "none";
+const storageReady = () => (settings.storage === "github" ? githubComplete() : settings.storage === "gdrive");
 
 // ---------- toast ----------
 let toastTimer = 0;
@@ -203,7 +209,7 @@ async function closeDoc() {
   document.title = "Penmit PDF";
   show("library");
   await renderLibrary();
-  if (githubReady() && inkDirty) runSync({ quiet: true });
+  if (storageReady() && inkDirty) runSync({ quiet: true });
 }
 
 // Save handwriting shortly after each change, and right away when the app is hidden.
@@ -324,7 +330,7 @@ async function exportCurrent() {
   }
 }
 
-// ---------- GitHub sync ----------
+// ---------- sync (GitHub or Google Drive) ----------
 const store = {
   listDocs: () => db.getAll("docs"),
   getDoc: (id) => db.get("docs", id),
@@ -351,13 +357,14 @@ const store = {
 };
 
 let syncing = false;
-function describeError(e) {
+function describeError(e, storage = settings.storage) {
   if (e.tooLarge) return t("errTooLarge", e.tooLarge);
+  if (e instanceof NeedsGoogleSignIn) return t("googleNeedsSignIn");
   switch (e.status) {
     case 0: return t("errNetwork");
-    case 401: return t("errAuth");
-    case 403: return t("errForbidden");
-    case 404: return t("errNotFound");
+    case 401: return storage === "gdrive" ? t("errDriveAuth") : t("errAuth");
+    case 403: return storage === "gdrive" ? t("errDriveForbidden") : t("errForbidden");
+    case 404: return storage === "gdrive" ? t("errDriveNotFound") : t("errNotFound");
     case 429: return t("errRate");
     default: return e.message || String(e);
   }
@@ -367,16 +374,21 @@ function setSyncBusy(busy) {
 }
 async function runSync({ quiet = false } = {}) {
   if (syncing) return;
-  if (!githubReady()) {
+  if (!storageReady()) {
     if (!quiet) { toast(t("syncNotSet")); openSettings(); }
     return;
   }
+  if (settings.storage === "gdrive" && !(await googleAuth.signedIn())) {
+    if (!quiet) { toast(t("googleNeedsSignIn")); openSettings(); }
+    return;
+  }
+  const backend = settings.storage === "gdrive" ? new DriveBackend() : new GitHubBackend(settings.github);
   syncing = true;
   setSyncBusy(true);
   if (!quiet) toast(t("syncing"), { ms: 600_000 });
   try {
     await flushInk();
-    const stats = await sync(new GitHub(settings.github), store);
+    const stats = await sync(backend, store);
     inkDirty = false;
     if (!quiet || stats.down || stats.merged) toast(t("syncDone", stats));
     if (!current) await renderLibrary();
@@ -394,18 +406,48 @@ $("#reader-sync").addEventListener("click", () => runSync());
 // ---------- settings ----------
 const dialog = $("#settings");
 const form = $("#settings-form");
+function showStoragePanels() {
+  const choice = form.storage.value;
+  $("#gdrive-panel").hidden = choice !== "gdrive";
+  $("#github-panel").hidden = choice !== "github";
+  if (choice === "gdrive") refreshGoogleStatus();
+}
+async function refreshGoogleStatus() {
+  const status = $("#gdrive-status");
+  const available = await googleAuth.available();
+  $("#gdrive-unavailable").hidden = available;
+  $("#gdrive-unavailable").textContent = isAndroidApp ? t("driveUnavailableAndroid") : t("driveUnavailableDesktop");
+  $("#gdrive-actions").hidden = !available;
+  if (!available) return;
+  status.className = "status";
+  const signedIn = await googleAuth.signedIn();
+  $("#google-sign-in").hidden = signedIn;
+  $("#google-sign-out").hidden = !signedIn;
+  if (!signedIn) { status.textContent = t("googleNotSignedIn"); return; }
+  try {
+    const user = await new DriveBackend().account();
+    status.textContent = t("googleSignedIn", user.emailAddress || user.displayName || "Google");
+    status.classList.add("ok");
+  } catch (e) {
+    status.textContent = describeError(e, "gdrive");
+    status.classList.add("bad");
+  }
+}
 function openSettings() {
   const g = settings.github;
   form.owner.value = g.owner;
   form.repo.value = g.repo;
   form.branch.value = g.branch;
   form.token.value = g.token;
+  form.storage.value = settings.storage;
   form.fingerDraw.checked = settings.fingerDraw;
   $("#github-status").textContent = "";
   $("#version").textContent = t("version", VERSION);
+  showStoragePanels();
   dialog.showModal();
 }
 $("#lib-settings").addEventListener("click", openSettings);
+for (const r of form.querySelectorAll("input[name=storage]")) r.addEventListener("change", showStoragePanels);
 dialog.addEventListener("close", () => {
   if (dialog.returnValue !== "save") return;
   settings.github = {
@@ -414,10 +456,30 @@ dialog.addEventListener("close", () => {
     branch: form.branch.value.trim(),
     token: form.token.value.trim(),
   };
+  settings.storage = form.storage.value || "none";
   settings.fingerDraw = form.fingerDraw.checked;
   ink.setFingerDraw(settings.fingerDraw);
   saveSettings();
   toast(t("saved"));
+});
+
+// Google: sign in straight from the click (browsers only allow pop-ups that a click opens).
+$("#google-sign-in").addEventListener("click", () => {
+  const status = $("#gdrive-status");
+  status.className = "status";
+  status.textContent = t("googleSigningIn");
+  googleAuth.signIn({ after: "settings" }).then(() => {
+    settings.storage = "gdrive";
+    saveSettings();
+    refreshGoogleStatus();
+  }).catch((e) => {
+    status.textContent = t("googleSignInFailed", e.message);
+    status.classList.add("bad");
+  });
+});
+$("#google-sign-out").addEventListener("click", async () => {
+  await googleAuth.signOut();
+  refreshGoogleStatus();
 });
 $("#test-github").addEventListener("click", async () => {
   const status = $("#github-status");
@@ -481,9 +543,32 @@ document.addEventListener("gesturestart", (e) => e.preventDefault());
 $("#pages").addEventListener("contextmenu", (e) => e.preventDefault());
 
 // ---------- start ----------
-applyI18n();
-renderToolbar();
-show("library");
-renderLibrary();
-registerServiceWorker();
-window.penmit = { version: VERSION }; // handy when debugging
+function start() {
+  applyI18n();
+  // Coming back from Google's sign-in page.
+  const back = googleAuth.handleReturn();
+  if (back?.popup) {
+    // This window was the sign-in pop-up; if the browser kept it open, say so instead of loading the app.
+    document.body.innerHTML = "";
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = t("googlePopupDone");
+    document.body.append(p);
+    return;
+  }
+  renderToolbar();
+  show("library");
+  renderLibrary();
+  registerServiceWorker();
+  if (back?.redirect) {
+    if (back.ok) {
+      settings.storage = "gdrive";
+      saveSettings();
+      if (back.after === "settings") openSettings();
+    } else {
+      toast(t("googleSignInFailed", "access_denied"), { error: true });
+    }
+  }
+  window.penmit = { version: VERSION, desktop: isDesktop }; // handy when debugging
+}
+start();
