@@ -1,0 +1,68 @@
+{
+  "name": "penmit-pdf",
+  "productName": "Penmit PDF",
+  "version": "0.1.0",
+  "description": "Read and handwrite on PDFs, synced through your own GitHub repository.",
+  "homepage": "https://github.com/AI-Inspact-Lab/penmit-pdf",
+  "author": {
+    "name": "AI-Inspact-Lab",
+    "email": "227103098+AI-Inspact-Lab@users.noreply.github.com"
+  },
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "io.github.aiinspactlab.penmit",
+    "productName": "Penmit PDF",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "app/**/*",
+      "build/icon.png"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF Document",
+        "description": "PDF Document",
+        "mimeType": "application/pdf",
+        "role": "Viewer"
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "Penmit-PDF-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Penmit-PDF-${version}-portable.${ext}"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office",
+      "synopsis": "PDF reader with handwriting, synced through GitHub",
+      "artifactName": "Penmit-PDF-${version}-${arch}.${ext}"
+    },
+    "publish": null
+  }
+}

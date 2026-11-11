@@ -1,0 +1,9 @@
+{
+  "appId": "io.github.aiinspactlab.penmit",
+  "appName": "Penmit PDF",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false,
+    "backgroundColor": "#eef0f4"
+  }
+}

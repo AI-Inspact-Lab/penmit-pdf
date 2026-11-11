@@ -1,0 +1,27 @@
+# dependencies and build output
+node_modules/
+desktop/app/
+desktop/dist/
+mobile/www/
+mobile/android/
+mobile/dist/
+tests/out/
+
+# signing material and secrets: never commit
+*.keystore
+*.jks
+*.p12
+*.pfx
+*.pem
+*.key
+keystore.properties
+.env
+.env.*
+
+# local tooling
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc
+.vscode/
+.idea/
