@@ -1,5 +1,11 @@
-// Offline support for the web app: the app itself is cached; Google Drive and GitHub calls always go to the network.
-const VERSION = "penmit-0.5.0";
+// Offline support for the web app.
+//
+// The app's own files are fetched fresh whenever the device is online (revalidated, so usually a
+// quick "not modified"), and the cache is only the fallback when offline. A new version therefore
+// always arrives whole; serving cached code first used to mix a new page with old code right
+// after an update. Third-party files under vendor/ don't change between versions and come from
+// the cache. Google Drive and GitHub requests are never touched.
+const VERSION = "penmit-0.5.1";
 const CORE = [
   "./",
   "index.html",
@@ -26,7 +32,12 @@ const CORE = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(VERSION).then((c) => c.addAll(CORE)).then(() => self.skipWaiting()));
+  // "reload" skips the browser's HTTP cache, so the new version's files are cached, not old copies.
+  event.waitUntil(
+    caches.open(VERSION)
+      .then((c) => c.addAll(CORE.map((u) => new Request(u, { cache: "reload" }))))
+      .then(() => self.skipWaiting()),
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -37,25 +48,34 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+async function fresh(req, key) {
+  const cache = await caches.open(VERSION);
+  try {
+    let res = await fetch(req.mode === "navigate" ? req.url : req, { cache: "no-cache", credentials: "same-origin" });
+    if (res.redirected) res = await fetch(req); // let the browser handle redirects itself
+    if (res.ok) cache.put(key, res.clone());
+    return res;
+  } catch (e) {
+    const hit = await cache.match(key, { ignoreSearch: true });
+    if (hit) return hit;
+    throw e;
+  }
+}
+
+async function cached(req) {
+  const cache = await caches.open(VERSION);
+  const hit = await cache.match(req);
+  if (hit) return hit;
+  const res = await fetch(req);
+  if (res.ok) cache.put(req, res.clone());
+  return res;
+}
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
-
-  // Pages: network first so updates arrive, cache when offline.
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => { const copy = res.clone(); caches.open(VERSION).then((c) => c.put("index.html", copy)); return res; })
-        .catch(() => caches.match("index.html")),
-    );
-    return;
-  }
-  // Everything else (code, fonts, CMaps): cache first, filled on first use.
-  event.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      if (res.ok) { const copy = res.clone(); caches.open(VERSION).then((c) => c.put(req, copy)); }
-      return res;
-    })),
-  );
+  if (req.mode === "navigate") event.respondWith(fresh(req, "index.html"));
+  else if (url.pathname.includes("/vendor/")) event.respondWith(cached(req));
+  else event.respondWith(fresh(req, req));
 });

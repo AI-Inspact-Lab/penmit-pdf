@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.5.1";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -411,6 +411,7 @@ async function closeDoc() {
   show("library");
   await renderLibrary();
   if (autoSyncOn() && inkDirty) runSync({ quiet: true });
+  else reloadIfUpdated();
 }
 
 // Save handwriting shortly after each change, and right away when the app is hidden.
@@ -949,6 +950,10 @@ const store = {
 };
 
 let syncing = false;
+let updateReady = false;
+function reloadIfUpdated() {
+  if (updateReady && !current && !syncing && !(autoSyncOn() && inkDirty)) location.reload();
+}
 let syncProblem = null; // what went wrong in the last automatic sync, shown instead of a toast
 
 // Automatic sync: a little after the last change, when the app comes back, and when it goes
@@ -1033,6 +1038,7 @@ async function runSync({ quiet = false } = {}) {
   } finally {
     syncing = false;
     setSyncBusy(false);
+    reloadIfUpdated();
   }
 }
 $("#lib-sync").addEventListener("click", () => runSync());
@@ -1218,7 +1224,11 @@ function start() {
   updateSyncLine();
   renderLibrary();
   if (autoSyncOn()) scheduleAutoSync(1_500);
-  registerServiceWorker();
+  registerServiceWorker(() => {
+    // A new version is ready: reload when it won't interrupt anything.
+    updateReady = true;
+    reloadIfUpdated();
+  });
   if (back?.redirect) {
     if (back.ok) {
       settings.storage = "gdrive";

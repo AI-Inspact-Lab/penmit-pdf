@@ -46,8 +46,11 @@ export async function saveFile(name, bytes) {
   return true;
 }
 
-export function registerServiceWorker() {
+// When a newer version takes over an open app, `onUpdate` runs so the app can reload at a good moment.
+export function registerServiceWorker(onUpdate = () => {}) {
   if (isDesktop || isAndroidApp || !("serviceWorker" in navigator)) return;
   if (location.protocol !== "https:" && location.hostname !== "localhost") return;
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController) onUpdate(); });
   navigator.serviceWorker.register("sw.js").catch((e) => console.warn("service worker", e));
 }

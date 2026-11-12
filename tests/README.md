@@ -14,4 +14,5 @@ python3 tests/e2e_drive.py     # Google sign-in (pop-up, redirect, desktop) and 
 python3 tests/e2e_phone.py     # a phone: taps, finger writing, hand tool, switching to pen-only
 python3 tests/e2e_fullscreen.py  # full screen two-page reading, swipes and taps, go to page
 python3 tests/e2e_tools.py     # partial eraser, lasso, pages panel and contents, blank pages
+python3 tests/e2e_update.py    # a new web version arrives whole; the app still opens offline
 ```
