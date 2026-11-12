@@ -11,4 +11,5 @@ node tests/make_test_pdf.mjs   # writes tests/out/test.pdf and tests/out/big.pdf
 python3 tests/e2e_ui.py        # viewing, drawing, erasing, undo, layouts, export
 python3 tests/e2e_sync.py      # GitHub sync between two devices (mock API)
 python3 tests/e2e_drive.py     # Google sign-in (pop-up, redirect, desktop) and Drive sync (mock API)
+python3 tests/e2e_phone.py     # a phone: taps, finger writing, hand tool, switching to pen-only
 ```

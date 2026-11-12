@@ -246,7 +246,10 @@ export class Ink extends EventTarget {
     const el = e.target.closest?.(".page");
     const p = el?.__page;
     if (!p || !this.model) return;
-    if (e.pointerType === "pen") this.lastPenAt = performance.now();
+    if (e.pointerType === "pen") {
+      this.lastPenAt = performance.now();
+      this.#emit("pen");
+    }
     if (this.viewer.gesture) return;
 
     if (this.tool === "hand") {

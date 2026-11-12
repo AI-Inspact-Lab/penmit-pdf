@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -18,7 +18,7 @@ function readSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); } catch { return {}; }
 }
 const settings = {
-  fingerDraw: false,
+  fingerMode: "auto",
   tool: "pen",
   style: null,
   layout: "single",
@@ -30,6 +30,15 @@ const settings = {
 function saveSettings() {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* storage unavailable */ }
 }
+// Finger drawing: "auto" draws with a finger until a pen is used on this device, then the
+// finger only moves the page (as note apps do once a stylus is paired). "on"/"off" are the
+// user's own choice. Older settings had a plain on/off switch that defaulted to off.
+if (settings.fingerDraw === true && !readSettings().fingerMode) settings.fingerMode = "on";
+delete settings.fingerDraw;
+if (!["auto", "on", "off"].includes(settings.fingerMode)) settings.fingerMode = "auto";
+const PEN_SEEN_KEY = "penmit.penSeen";
+let penSeen = (() => { try { return localStorage.getItem(PEN_SEEN_KEY) === "1"; } catch { return false; } })();
+const fingerDraws = () => settings.fingerMode === "on" || (settings.fingerMode === "auto" && !penSeen);
 const githubComplete = () => Boolean(settings.github.owner && settings.github.repo && settings.github.token);
 // Where to sync: "none", "gdrive" or "github" (older settings had only GitHub).
 if (!settings.storage) settings.storage = githubComplete() ? "github" : "none";
@@ -49,7 +58,16 @@ function toast(message, { error = false, ms = 3200 } = {}) {
 // ---------- views ----------
 const viewer = new Viewer($("#scroller"), $("#pages"));
 const ink = new Ink(viewer);
-ink.setFingerDraw(settings.fingerDraw);
+ink.setFingerDraw(fingerDraws());
+ink.addEventListener("pen", () => {
+  if (penSeen) return;
+  penSeen = true;
+  try { localStorage.setItem(PEN_SEEN_KEY, "1"); } catch { /* storage unavailable */ }
+  if (settings.fingerMode === "auto") {
+    ink.setFingerDraw(false);
+    toast(t("penDetected"), { ms: 4500 });
+  }
+});
 if (settings.style) {
   for (const k of ["pen", "highlighter"]) if (settings.style[k]) ink.style[k] = { ...ink.style[k], ...settings.style[k] };
 }
@@ -450,14 +468,14 @@ $("#redo").addEventListener("click", () => ink.redo());
 // ---------- toolbar ----------
 function renderToolbar() {
   const tool = ink.tool;
-  for (const b of document.querySelectorAll("[data-tool]")) b.setAttribute("aria-checked", String(b.dataset.tool === tool));
+  for (const b of document.querySelectorAll(".tool[data-tool]")) b.setAttribute("aria-checked", String(b.dataset.tool === tool));
   const bar = $("#toolbar");
   bar.classList.toggle("eraser-mode", tool === "eraser");
   bar.classList.toggle("hand-mode", tool === "hand");
   const kind = tool === "highlighter" ? "highlighter" : "pen";
   const style = ink.style[kind];
-  $("[data-tool=pen] .tool-color").style.setProperty("--c", ink.style.pen.color);
-  $("[data-tool=highlighter] .tool-color").style.setProperty("--c", ink.style.highlighter.color);
+  $(".tool[data-tool=pen] .tool-color").style.setProperty("--c", ink.style.pen.color);
+  $(".tool[data-tool=highlighter] .tool-color").style.setProperty("--c", ink.style.highlighter.color);
 
   const swatches = $("#swatches");
   swatches.textContent = "";
@@ -500,7 +518,7 @@ function selectTool(tool) {
   saveSettings();
   renderToolbar();
 }
-for (const b of document.querySelectorAll("[data-tool]")) b.addEventListener("click", () => selectTool(b.dataset.tool));
+for (const b of document.querySelectorAll(".tool[data-tool]")) b.addEventListener("click", () => selectTool(b.dataset.tool));
 
 // ---------- export ----------
 async function exportCurrent() {
@@ -640,7 +658,7 @@ function openSettings() {
   form.branch.value = g.branch;
   form.token.value = g.token;
   form.storage.value = settings.storage;
-  form.fingerDraw.checked = settings.fingerDraw;
+  form.fingerDraw.checked = fingerDraws();
   $("#github-status").textContent = "";
   $("#version").textContent = VERSION;
   showStoragePanels();
@@ -657,8 +675,9 @@ dialog.addEventListener("close", () => {
     token: form.token.value.trim(),
   };
   settings.storage = form.storage.value || "none";
-  settings.fingerDraw = form.fingerDraw.checked;
-  ink.setFingerDraw(settings.fingerDraw);
+  // Keep "auto" unless the switch was actually changed.
+  if (form.fingerDraw.checked !== fingerDraws()) settings.fingerMode = form.fingerDraw.checked ? "on" : "off";
+  ink.setFingerDraw(fingerDraws());
   saveSettings();
   updateSyncLine();
   if (!current) renderLibrary();

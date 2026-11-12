@@ -276,6 +276,7 @@ a { color: var(--accent); }
 .page canvas.ink, .page canvas.live { mix-blend-mode: multiply; }
 .page .page-num { display: none; }
 .pages.finger-draw .page { touch-action: none; }
+.scroller[data-tool="hand"] .pages.finger-draw .page { touch-action: pan-x pan-y; }
 .scroller[data-tool="pen"] .page, .scroller[data-tool="highlighter"] .page { cursor: crosshair; }
 .scroller[data-tool="eraser"] .page { cursor: cell; }
 .scroller[data-tool="hand"] .page { cursor: grab; }
