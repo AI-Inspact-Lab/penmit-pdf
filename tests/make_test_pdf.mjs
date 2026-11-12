@@ -29,6 +29,12 @@ for (let i = 1; i <= 6; i++) {
 mkdirSync(new URL("./out/", import.meta.url), { recursive: true });
 writeFileSync(new URL("./out/test.pdf", import.meta.url), await doc.save());
 
+// tests/out/four.pdf: four portrait pages (in the cover layout: 1, 2+3, 4).
+const four = await PDFDocument.create();
+const fourFont = await four.embedFont(StandardFonts.Helvetica);
+for (let i = 1; i <= 4; i++) four.addPage([595, 842]).drawText(`Page ${i} of 4`, { x: 60, y: 760, size: 28, font: fourFont });
+writeFileSync(new URL("./out/four.pdf", import.meta.url), await four.save());
+
 // tests/out/big.pdf: one page plus 5 MB of unused random data, to exercise large uploads.
 const big = await PDFDocument.create();
 const bigFont = await big.embedFont(StandardFonts.Helvetica);

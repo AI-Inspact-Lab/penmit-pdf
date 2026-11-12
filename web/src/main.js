@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.5.1";
+export const VERSION = "0.5.2";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------

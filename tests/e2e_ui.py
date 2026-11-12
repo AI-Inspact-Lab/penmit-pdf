@@ -220,7 +220,24 @@ with sync_playwright() as p:
     page.wait_for_timeout(900)
     page.locator(".page").nth(4).screenshot(path=S + "08_export_rotated.png")
 
-    errs = [e for e in errors if "favicon" not in e]
+    # A short document in the cover layout: the spread fits the width (the single cover and last
+    # page must not set the zoom).
+    page.locator("#back").click()
+    page.set_input_files("#file-input", S + "four.pdf")
+    page.wait_for_selector("#reader:not([hidden])", timeout=15000)
+    page.wait_for_timeout(900)
+    layout("cover")
+    page.wait_for_timeout(500)
+    fit = page.evaluate("""() => {
+      const sc = document.querySelector('#scroller');
+      const row = document.querySelectorAll('.page-row')[1];
+      const a = row.firstElementChild.getBoundingClientRect(), b = row.lastElementChild.getBoundingClientRect();
+      return [row.children.length, Math.round(b.right - a.left), sc.clientWidth, sc.scrollWidth];
+    }""")
+    check(fit[0] == 2 and fit[1] <= fit[2] and fit[3] <= fit[2], f"a four-page document's spread fits the screen in the cover layout {fit}")
+    layout("single")
+
+    errs =[e for e in errors if "favicon" not in e]
     check(not errs, f"no console errors {errs}")
     b.close()
 

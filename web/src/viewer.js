@@ -255,7 +255,9 @@ export class Viewer extends EventTarget {
   }
 
   // Fit the typical row to the width. Using the widest row would let one landscape page
-  // shrink every portrait page; an unusually wide page scrolls sideways instead.
+  // shrink every portrait page; an unusually wide page scrolls sideways instead. In the two-page
+  // layouts only full rows count, so the cover and an odd last page can't make a short document's
+  // spreads too wide for the screen.
   fitScale() {
     const cs = getComputedStyle(this.pagesEl);
     const padX = (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) || SIDE_PADDING * 2;
@@ -264,7 +266,10 @@ export class Viewer extends EventTarget {
     const gap = rowEl ? parseFloat(getComputedStyle(rowEl).columnGap) || 0 : PAGE_GAP;
     const availW = Math.max(120, this.scroller.clientWidth - padX);
     const availH = Math.max(120, this.scroller.clientHeight - padY);
-    const fits = this.rows()
+    const rows = this.rows();
+    const most = Math.max(...rows.map((row) => row.length));
+    const fits = rows
+      .filter((row) => row.length === most)
       .map((row) => {
         const byWidth = (availW - gap * (row.length - 1)) / row.reduce((s, i) => s + this.pages[i].w, 0);
         if (this.fitMode !== "page") return byWidth;

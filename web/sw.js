@@ -5,7 +5,7 @@
 // always arrives whole; serving cached code first used to mix a new page with old code right
 // after an update. Third-party files under vendor/ don't change between versions and come from
 // the cache. Google Drive and GitHub requests are never touched.
-const VERSION = "penmit-0.5.1";
+const VERSION = "penmit-0.5.2";
 const CORE = [
   "./",
   "index.html",
