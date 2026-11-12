@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.3.1";
+export const VERSION = "0.4.0";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -395,6 +395,7 @@ async function openDoc(id) {
 
 async function closeDoc() {
   if (!current) return;
+  exitFullscreen();
   await flushInk();
   const d = (await db.get("docs", current.id)) || current.doc;
   await db.put("docs", { ...d, view: { layout: viewer.layout, zoom: viewer.zoom, page: viewer.currentPage() } });
@@ -424,6 +425,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) flush
 window.addEventListener("pagehide", () => { flushInk(); });
 
 function syncHistoryButtons() {
+  $("#fs-undo").disabled = !ink.canUndo;
   $("#undo").disabled = !ink.canUndo;
   $("#redo").disabled = !ink.canRedo;
 }
@@ -445,6 +447,99 @@ function flashPageIndicator() {
 viewer.addEventListener("pagechange", (e) => { syncPageIndicator(e.detail); flashPageIndicator(); });
 $("#scroller").addEventListener("scroll", flashPageIndicator, { passive: true });
 $("#view-btn").addEventListener("click", () => toggleMenu($("#view-menu"), $("#view-btn")));
+
+// ---------- full screen ----------
+// Only the pages, each row (two pages in the two-page layouts) fitted to the screen and
+// moved one at a time. A pen writes; a finger turns the pages (swipe, or tap near an edge).
+let fullscreen = null; // { zoom, browser }
+const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+function enterFullscreen() {
+  if (fullscreen || !current) return;
+  closeMenu();
+  fullscreen = { zoom: viewer.zoom, browser: false };
+  $("#reader").classList.add("fullscreen");
+  if (ink.tool === "hand") selectTool("pen");
+  ink.setFingerDraw(false);
+  viewer.zoom = 1;
+  viewer.setFitMode("page");
+  syncHistoryButtons();
+  const root = document.documentElement;
+  const request = root.requestFullscreen?.bind(root) || root.webkitRequestFullscreen?.bind(root);
+  try {
+    const r = request?.({ navigationUI: "hide" });
+    r?.catch?.(() => {});
+  } catch { /* not allowed here (iPhone): the app still hides its own bars */ }
+}
+function exitFullscreen() {
+  if (!fullscreen) return;
+  const { zoom } = fullscreen;
+  fullscreen = null;
+  $("#reader").classList.remove("fullscreen", "zoomed");
+  ink.setFingerDraw(fingerDraws());
+  viewer.zoom = zoom;
+  viewer.setFitMode("width");
+  if (fsElement()) {
+    try { (document.exitFullscreen || document.webkitExitFullscreen).call(document)?.catch?.(() => {}); } catch { /* ignore */ }
+  }
+}
+for (const type of ["fullscreenchange", "webkitfullscreenchange"]) {
+  document.addEventListener(type, () => {
+    if (!fullscreen) return;
+    if (fsElement()) fullscreen.browser = true;
+    else if (fullscreen.browser) exitFullscreen(); // the browser's own exit (Esc, back gesture)
+  });
+}
+$("#fullscreen").addEventListener("click", enterFullscreen);
+$("#fs-exit").addEventListener("click", exitFullscreen);
+$("#fs-undo").addEventListener("click", () => ink.undo());
+viewer.addEventListener("zoom", () => {
+  $("#reader").classList.toggle("zoomed", Boolean(fullscreen) && viewer.zoom > 1.02);
+});
+
+// Finger swipes and edge taps turn the pages in full screen. Pointer events tell a finger
+// from a pen; a vertical swipe scrolls natively (and is cancelled here).
+let swipe = null;
+$("#scroller").addEventListener("pointerdown", (e) => {
+  swipe = fullscreen && e.pointerType === "touch" && e.isPrimary && !viewer.gesture
+    ? { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now() }
+    : null;
+});
+$("#scroller").addEventListener("pointercancel", (e) => { if (swipe?.id === e.pointerId) swipe = null; });
+$("#scroller").addEventListener("pointerup", (e) => {
+  const s = swipe;
+  swipe = null;
+  if (!s || s.id !== e.pointerId || !fullscreen || viewer.zoom > 1.02 || viewer.gesture) return;
+  const dx = e.clientX - s.x;
+  const dy = e.clientY - s.y;
+  if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) { viewer.stepRow(dx < 0 ? 1 : -1); return; }
+  if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && performance.now() - s.t < 350) {
+    const box = $("#scroller").getBoundingClientRect();
+    const fx = (e.clientX - box.left) / box.width;
+    if (fx < 0.2) viewer.stepRow(-1);
+    else if (fx > 0.8) viewer.stepRow(1);
+  }
+});
+
+// ---------- go to page ----------
+const gotoDialog = $("#goto");
+const gotoInput = $("#goto-form").elements.namedItem("page");
+$("#page-ind").addEventListener("click", () => {
+  if (!viewer.pages.length) return;
+  gotoInput.value = "";
+  gotoInput.placeholder = String(viewer.currentPage() + 1);
+  $("#goto-range").textContent = t("gotoRange", viewer.pages.length);
+  gotoDialog.returnValue = "";
+  gotoDialog.showModal();
+  gotoInput.focus();
+});
+gotoDialog.addEventListener("close", () => {
+  if (gotoDialog.returnValue !== "ok") return;
+  // Accept full-width digits too (handwriting and some keyboards produce them).
+  const digits = gotoInput.value.replace(/[０-９]/g, (c) => String(c.charCodeAt(0) - 0xff10)).replace(/\D/g, "");
+  const n = parseInt(digits, 10);
+  if (!Number.isFinite(n)) return;
+  viewer.scrollToPage(Math.min(Math.max(n, 1), viewer.pages.length) - 1, false);
+});
 viewer.addEventListener("zoom", syncZoomLabel);
 
 for (const b of document.querySelectorAll("[data-layout]")) {
@@ -749,9 +844,15 @@ window.penmitDesktop?.onOpenFiles?.((files) => {
 // ---------- keyboard ----------
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && openMenuEl) { closeMenu(); return; }
-  if (!current || dialog.open || renameDialog.open || e.target.closest?.("input, textarea")) return;
+  if (!current || dialog.open || renameDialog.open || gotoDialog.open || e.target.closest?.("input, textarea")) return;
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
+  if (fullscreen && !mod) {
+    const step = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[e.key];
+    if (step) { e.preventDefault(); viewer.stepRow(e.shiftKey && e.key === " " ? -1 : step); return; }
+    if (e.key === "Escape") { exitFullscreen(); return; }
+  }
+  if (!mod && !e.altKey && k === "f") { if (fullscreen) exitFullscreen(); else enterFullscreen(); return; }
   if (mod && k === "z") { e.preventDefault(); if (e.shiftKey) ink.redo(); else ink.undo(); }
   else if (mod && k === "y") { e.preventDefault(); ink.redo(); }
   else if (mod && (k === "=" || k === "+")) { e.preventDefault(); viewer.setZoom(viewer.zoom * ZOOM_STEP); }

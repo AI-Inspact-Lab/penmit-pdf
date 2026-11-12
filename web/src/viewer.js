@@ -9,8 +9,8 @@ const MAX_CANVAS_PIXELS = 16_000_000;
 const MAX_RENDERED_PAGES = 14;
 export const MIN_ZOOM = 0.3;
 export const MAX_ZOOM = 6;
-const PAGE_GAP = 14;      // px between pages in a row (matches .page-row gap)
-const SIDE_PADDING = 24;  // px (matches .pages padding)
+const PAGE_GAP = 12;      // px between pages in a row, if the stylesheet hasn't loaded
+const SIDE_PADDING = 20;  // px, likewise
 
 export async function openPdf(bytes) {
   const task = pdfjs.getDocument({
@@ -54,6 +54,9 @@ export class Viewer extends EventTarget {
     this.pdf = null;
     this.pages = [];
     this.layout = "single";
+    // "width": rows fill the width and the pages scroll. "page": each row fits the screen
+    // whole and the pages move a row at a time (full-screen reading).
+    this.fitMode = "width";
     this.zoom = 1;
     this.scale = 1;
     this.visible = new Set();
@@ -83,7 +86,12 @@ export class Viewer extends EventTarget {
     let resizeTimer = 0;
     this.onResize = () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => this.pdf && this.relayout(), 150);
+      resizeTimer = setTimeout(() => {
+        if (!this.pdf) return;
+        const page = this.currentPage();
+        this.relayout();
+        if (this.fitMode === "page") this.scrollToPage(page, false);
+      }, 150);
     };
     window.addEventListener("resize", this.onResize);
 
@@ -181,9 +189,19 @@ export class Viewer extends EventTarget {
   // Fit the typical row to the width. Using the widest row would let one landscape page
   // shrink every portrait page; an unusually wide page scrolls sideways instead.
   fitScale() {
-    const avail = Math.max(120, this.scroller.clientWidth - SIDE_PADDING * 2);
+    const cs = getComputedStyle(this.pagesEl);
+    const padX = (parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)) || SIDE_PADDING * 2;
+    const padY = (parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)) || 0;
+    const rowEl = this.pagesEl.querySelector(".page-row");
+    const gap = rowEl ? parseFloat(getComputedStyle(rowEl).columnGap) || 0 : PAGE_GAP;
+    const availW = Math.max(120, this.scroller.clientWidth - padX);
+    const availH = Math.max(120, this.scroller.clientHeight - padY);
     const fits = this.rows()
-      .map((row) => (avail - PAGE_GAP * (row.length - 1)) / row.reduce((s, i) => s + this.pages[i].w, 0))
+      .map((row) => {
+        const byWidth = (availW - gap * (row.length - 1)) / row.reduce((s, i) => s + this.pages[i].w, 0);
+        if (this.fitMode !== "page") return byWidth;
+        return Math.min(byWidth, availH / Math.max(...row.map((i) => this.pages[i].h)));
+      })
       .sort((a, b) => a - b);
     const fit = fits[Math.floor((fits.length - 1) / 2)];
     return Number.isFinite(fit) && fit > 0 ? fit : 1;
@@ -191,6 +209,7 @@ export class Viewer extends EventTarget {
 
   relayout() {
     if (!this.pages.length) return;
+    this.pagesEl.style.setProperty("--row-h", `${this.scroller.clientHeight}px`);
     this.scale = this.fitScale() * this.zoom;
     for (const p of this.pages) {
       p.el.style.width = `${Math.round(p.w * this.scale)}px`;
@@ -247,9 +266,29 @@ export class Viewer extends EventTarget {
     return best;
   }
 
+  setFitMode(mode) {
+    if (mode === this.fitMode || !this.pages.length) { this.fitMode = mode; return; }
+    const page = this.currentPage();
+    this.fitMode = mode;
+    this.relayout();
+    this.scrollToPage(page, false);
+  }
+
+  // The next or previous row (two pages in the two-page layouts).
+  stepRow(dir) {
+    const rows = this.rows();
+    const at = rows.findIndex((r) => r.includes(this.currentPage()));
+    const next = rows[clamp(at + dir, 0, rows.length - 1)];
+    if (next) this.scrollToPage(next[0]);
+  }
+
   scrollToPage(index, smooth = true) {
     const p = this.pages[clamp(index | 0, 0, this.pages.length - 1)];
     if (!p) return;
+    if (this.fitMode === "page" && p.el.parentElement) {
+      this.scroller.scrollTo({ top: p.el.parentElement.offsetTop, left: 0, behavior: smooth ? "smooth" : "auto" });
+      return;
+    }
     const box = this.scroller.getBoundingClientRect();
     const r = p.el.getBoundingClientRect();
     this.scroller.scrollTo({

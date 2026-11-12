@@ -12,4 +12,5 @@ python3 tests/e2e_ui.py        # viewing, drawing, erasing, undo, layouts, expor
 python3 tests/e2e_sync.py      # GitHub sync between two devices (mock API)
 python3 tests/e2e_drive.py     # Google sign-in (pop-up, redirect, desktop) and Drive sync (mock API)
 python3 tests/e2e_phone.py     # a phone: taps, finger writing, hand tool, switching to pen-only
+python3 tests/e2e_fullscreen.py  # full screen two-page reading, swipes and taps, go to page
 ```

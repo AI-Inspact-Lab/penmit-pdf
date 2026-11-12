@@ -85,6 +85,9 @@
       <button class="nav-btn" id="view-btn" type="button" aria-haspopup="menu" aria-expanded="false" data-i18n-label="layout" data-i18n-title="layout">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C10.4 5 8 4.5 3.5 4.5v13c4.5 0 6.9.5 8.5 2 1.6-1.5 4-2 8.5-2v-13C16 4.5 13.6 5 12 6.5z"/><path d="M12 6.5v13"/></svg>
       </button>
+      <button class="nav-btn" id="fullscreen" type="button" data-i18n-label="fullscreen" data-i18n-title="fullscreen">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
       <button class="nav-btn" id="export" type="button" data-i18n-label="export" data-i18n-title="export">
         <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3.5M8 7.5l4-4 4 4"/><path d="M8.5 10.5H6.5a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-8.5a1 1 0 0 0-1-1h-2"/></svg>
       </button>
@@ -158,7 +161,15 @@
     <div id="scroller" class="scroller">
       <div id="pages" class="pages"></div>
     </div>
-    <span class="page-ind" id="page-ind" aria-live="polite"></span>
+    <button class="page-ind" id="page-ind" type="button" aria-haspopup="dialog" data-i18n-title="gotoTitle"></button>
+    <div class="fs-controls">
+      <button class="fs-btn" id="fs-undo" type="button" data-i18n-label="undo">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+      </button>
+      <button class="fs-btn" id="fs-exit" type="button" data-i18n-label="exitFullscreen">
+        <svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>
+      </button>
+    </div>
   </div>
 </section>
 
@@ -224,8 +235,21 @@
     <h2 data-i18n="renameTitle"></h2>
     <input name="name" autocomplete="off" spellcheck="false" required>
     <div class="alert-actions">
-      <button class="alert-btn" value="cancel" type="submit" formnovalidate data-i18n="cancel"></button>
       <button class="alert-btn strong" value="ok" type="submit" data-i18n="renameOk"></button>
+      <button class="alert-btn" value="cancel" type="submit" formnovalidate data-i18n="cancel"></button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Go to page -->
+<dialog id="goto" class="alert">
+  <form method="dialog" id="goto-form">
+    <h2 data-i18n="gotoTitle"></h2>
+    <p class="alert-sub" id="goto-range"></p>
+    <input name="page" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" required>
+    <div class="alert-actions">
+      <button class="alert-btn strong" value="ok" type="submit" data-i18n="gotoOk"></button>
+      <button class="alert-btn" value="cancel" type="submit" formnovalidate data-i18n="cancel"></button>
     </div>
   </form>
 </dialog>
