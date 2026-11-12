@@ -3,7 +3,7 @@
 // Every PDF is three files in the backend, under its SHA-256 as the folder name:
 //   document.pdf   the original PDF (uploaded once)
 //   meta.json      name, page count, dates
-//   ink.json       the handwriting (small text that merges cleanly)
+//   ink.json       the handwriting and inserted blank pages (small text that merges cleanly)
 //
 // A backend implements:
 //   key                       stable id of the storage location (e.g. "owner/repo", "gdrive:me@x")
@@ -61,30 +61,35 @@ function sortedObject(obj) {
 }
 
 // Stable JSON, so the same ink always produces the same bytes (and the same version token).
+// Ink without blank pages keeps its old layout, so files written before blank pages existed
+// keep the same bytes (and version token).
 export function inkToBytes(model) {
-  return enc.encode(JSON.stringify({ v: 1, strokes: sortedObject(model.strokes), deleted: sortedObject(model.deleted) }));
+  const data = { v: 1, strokes: sortedObject(model.strokes), deleted: sortedObject(model.deleted) };
+  if (model.pages && Object.keys(model.pages).length) data.pages = sortedObject(model.pages);
+  return enc.encode(JSON.stringify(data));
 }
 
 export function inkFromBytes(id, bytes) {
   const data = JSON.parse(dec.decode(bytes));
-  return { id, strokes: data.strokes || {}, deleted: data.deleted || {} };
+  return { id, strokes: data.strokes || {}, deleted: data.deleted || {}, pages: data.pages || {} };
 }
 
-// Union of strokes from both sides, minus anything either side deleted.
+// Union of strokes and blank pages from both sides, minus anything either side deleted.
 export function mergeInk(a, b) {
   const strokes = { ...a.strokes, ...b.strokes };
+  const pages = { ...(a.pages || {}), ...(b.pages || {}) };
   const deleted = { ...a.deleted };
   for (const [k, v] of Object.entries(b.deleted)) deleted[k] = Math.max(deleted[k] || 0, v);
-  for (const k of Object.keys(deleted)) delete strokes[k];
-  return { id: a.id, strokes, deleted };
+  for (const k of Object.keys(deleted)) { delete strokes[k]; delete pages[k]; }
+  return { id: a.id, strokes, deleted, pages };
 }
 
+const sameKeys = (a = {}, b = {}) => {
+  const ka = Object.keys(a);
+  return ka.length === Object.keys(b).length && ka.every((k) => k in b);
+};
 export function sameInk(a, b) {
-  const ka = Object.keys(a.strokes);
-  const kb = Object.keys(b.strokes);
-  const da = Object.keys(a.deleted);
-  const dbk = Object.keys(b.deleted);
-  return ka.length === kb.length && da.length === dbk.length && ka.every((k) => k in b.strokes) && da.every((k) => k in b.deleted);
+  return sameKeys(a.strokes, b.strokes) && sameKeys(a.deleted, b.deleted) && sameKeys(a.pages, b.pages);
 }
 
 // store: { listDocs, getDoc, getFile, getInk, putDoc, putFile, putInk, removeDoc, onDocDownloaded }
@@ -169,7 +174,7 @@ export async function sync(backend, store, { onProgress = () => {} } = {}) {
       onProgress("download", id);
       const meta = r.meta ? JSON.parse(dec.decode(await backend.read(id, "meta.json"))) : { id, name: `${id.slice(0, 8)}.pdf` };
       const pdf = await backend.read(id, "document.pdf");
-      const ink = r.ink ? inkFromBytes(id, await backend.read(id, "ink.json")) : { id, strokes: {}, deleted: {} };
+      const ink = r.ink ? inkFromBytes(id, await backend.read(id, "ink.json")) : { id, strokes: {}, deleted: {}, pages: {} };
       after.push(async () => {
         await store.putFile(id, pdf);
         await store.putInk(ink);

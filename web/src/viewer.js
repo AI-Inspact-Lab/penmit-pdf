@@ -46,6 +46,35 @@ export async function renderThumbnail(pdf, width = 420) {
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+// A blank page's geometry, shaped like the parts of pdf.js's PageViewport the app uses.
+function blankViewport(w, h, scale) {
+  return {
+    width: w * scale,
+    height: h * scale,
+    transform: [scale, 0, 0, -scale, 0, h * scale],
+    convertToPdfPoint: (x, y) => [x / scale, h - y / scale],
+    convertToViewportPoint: (x, y) => [x * scale, (h - y) * scale],
+  };
+}
+
+function pageElement(index, label) {
+  const el = document.createElement("div");
+  el.className = "page";
+  el.dataset.index = String(index);
+  const pdfCanvas = document.createElement("canvas");
+  pdfCanvas.className = "pdf";
+  pdfCanvas.width = pdfCanvas.height = 0;
+  const inkCanvas = document.createElement("canvas");
+  inkCanvas.className = "ink";
+  const liveCanvas = document.createElement("canvas");
+  liveCanvas.className = "live";
+  const num = document.createElement("span");
+  num.className = "page-num";
+  num.textContent = label;
+  el.append(pdfCanvas, inkCanvas, liveCanvas, num);
+  return { el, pdfCanvas, inkCanvas, liveCanvas };
+}
+
 export class Viewer extends EventTarget {
   constructor(scroller, pagesEl) {
     super();
@@ -60,6 +89,8 @@ export class Viewer extends EventTarget {
     this.zoom = 1;
     this.scale = 1;
     this.visible = new Set();
+    this.pdfPages = [];
+    this.byKey = new Map();
     this.renderQueue = [];
     this.renderedOrder = [];
     this.renderTimer = 0;
@@ -105,7 +136,9 @@ export class Viewer extends EventTarget {
     this.#attachTouchGestures();
   }
 
-  async load(pdf, { layout = "single", zoom = 1, page = 0 } = {}) {
+  // Pages are the PDF's pages plus any blank pages the user inserted. Each has `key` (the PDF
+  // page index, or "b:<id>" for a blank page) which ink refers to, and `index`, its place on screen.
+  async load(pdf, { layout = "single", zoom = 1, page = 0, blanks = [] } = {}) {
     this.clear();
     this.pdf = pdf;
     const n = pdf.numPages;
@@ -115,36 +148,70 @@ export class Viewer extends EventTarget {
       for (let i = start; i < Math.min(start + 24, n + 1); i++) batch.push(pdf.getPage(i));
       proxies.push(...(await Promise.all(batch)));
     }
-    this.pages = proxies.map((proxy, index) => {
+    this.pdfPages = proxies.map((proxy, index) => {
       const vp = proxy.getViewport({ scale: 1 });
-      const el = document.createElement("div");
-      el.className = "page";
-      el.dataset.index = String(index);
-      const pdfCanvas = document.createElement("canvas");
-      pdfCanvas.className = "pdf";
-      pdfCanvas.width = pdfCanvas.height = 0;
-      const inkCanvas = document.createElement("canvas");
-      inkCanvas.className = "ink";
-      const liveCanvas = document.createElement("canvas");
-      liveCanvas.className = "live";
-      const num = document.createElement("span");
-      num.className = "page-num";
-      num.textContent = String(index + 1);
-      el.append(pdfCanvas, inkCanvas, liveCanvas, num);
-      const p = { index, proxy, w: vp.width, h: vp.height, el, pdfCanvas, inkCanvas, liveCanvas, viewport: vp, renderedScale: 0, task: null };
-      el.__page = p;
+      const p = { key: index, index, proxy, w: vp.width, h: vp.height, ...pageElement(index, String(index + 1)), viewport: vp, renderedScale: 0, task: null };
+      p.el.__page = p;
       return p;
     });
+    this.blankCache = new Map();
+    this.#assemble(blanks);
     this.layout = layout;
     this.zoom = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
     this.build();
     this.scrollToPage(page, false);
   }
 
+  // Put the PDF pages and the blank pages in reading order.
+  #assemble(blanks) {
+    const n = this.pdfPages.length;
+    const groups = new Map();
+    for (const b of blanks) {
+      const at = clamp(b.after, -1, n - 1);
+      if (!groups.has(at)) groups.set(at, []);
+      groups.get(at).push(b);
+    }
+    for (const list of groups.values()) list.sort((a, b) => a.pos - b.pos || (a.id < b.id ? -1 : 1));
+    const blankPage = (b) => {
+      let p = this.blankCache.get(b.id);
+      if (!p) {
+        p = { key: `b:${b.id}`, blank: true, w: b.w, h: b.h, ...pageElement(0, ""), viewport: blankViewport(b.w, b.h, 1), renderedScale: 0 };
+        p.el.classList.add("blank-page");
+        p.el.__page = p;
+        this.blankCache.set(b.id, p);
+      }
+      return p;
+    };
+    const order = [];
+    for (const b of groups.get(-1) || []) order.push(blankPage(b));
+    for (let i = 0; i < n; i++) {
+      order.push(this.pdfPages[i]);
+      for (const b of groups.get(i) || []) order.push(blankPage(b));
+    }
+    order.forEach((p, i) => { p.index = i; p.el.dataset.index = String(i); });
+    this.pages = order;
+    this.byKey = new Map(order.map((p) => [p.key, p]));
+  }
+
+  // After blank pages were added or removed (here or by a sync). Keeps the page in view.
+  setBlankPages(blanks, focusKey = null) {
+    if (!this.pdf) return;
+    const keep = focusKey ?? this.pages[this.currentPage()]?.key;
+    this.#assemble(blanks);
+    this.build();
+    this.dispatchEvent(new Event("pagesrebuilt"));
+    const p = this.byKey.get(keep);
+    if (p) this.scrollToPage(p.index, false);
+    this.lastPage = -1;
+    this.#emitPage();
+  }
+
   clear() {
     this.io.disconnect();
-    for (const p of this.pages) { p.task?.cancel(); p.proxy.cleanup(); }
+    for (const p of this.pages) { p.task?.cancel(); p.proxy?.cleanup(); }
     this.pages = [];
+    this.pdfPages = [];
+    this.byKey = new Map();
     this.visible.clear();
     this.renderedOrder = [];
     this.pagesEl.textContent = "";
@@ -175,6 +242,7 @@ export class Viewer extends EventTarget {
 
   build() {
     this.io.disconnect();
+    this.visible.clear();
     this.pagesEl.textContent = "";
     for (const row of this.rows()) {
       const rowEl = document.createElement("div");
@@ -214,7 +282,7 @@ export class Viewer extends EventTarget {
     for (const p of this.pages) {
       p.el.style.width = `${Math.round(p.w * this.scale)}px`;
       p.el.style.height = `${Math.round(p.h * this.scale)}px`;
-      p.viewport = p.proxy.getViewport({ scale: this.scale });
+      p.viewport = p.blank ? blankViewport(p.w, p.h, this.scale) : p.proxy.getViewport({ scale: this.scale });
     }
     this.dispatchEvent(new Event("relayout"));
     this.scheduleRender();
@@ -343,6 +411,7 @@ export class Viewer extends EventTarget {
     p.task?.cancel();
     const out = this.#outputScale(p);
     const target = this.scale * out;
+    if (p.blank) { p.renderedScale = target; return; } // white paper, nothing to draw
     const viewport = p.proxy.getViewport({ scale: target });
     const canvas = document.createElement("canvas");
     canvas.className = "pdf";

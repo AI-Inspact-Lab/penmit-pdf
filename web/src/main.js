@@ -1,7 +1,7 @@
 import { t, applyI18n, lang } from "./i18n.js";
 import { db, requestPersistence, sha256Hex } from "./db.js";
 import { Viewer, openPdf, renderThumbnail, isPasswordError, MIN_ZOOM, MAX_ZOOM } from "./viewer.js";
-import { Ink, emptyInk, strokesByPage, PEN_COLORS, HIGHLIGHT_COLORS, WIDTHS } from "./ink.js";
+import { Ink, emptyInk, strokesByPage, blankPages, PEN_COLORS, HIGHLIGHT_COLORS, WIDTHS, ERASER_SIZES, drawStroke } from "./ink.js";
 import { exportAnnotated, EncryptedPdfError } from "./export.js";
 import { GitHub, GitHubBackend } from "./github.js";
 import { DriveBackend } from "./gdrive.js";
@@ -9,7 +9,7 @@ import { googleAuth, NeedsGoogleSignIn } from "./googleauth.js";
 import { sync, mergeInk, sameInk } from "./sync.js";
 import { saveFile, registerServiceWorker, isDesktop, isAndroidApp } from "./platform.js";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 const $ = (sel) => document.querySelector(sel);
 
 // ---------- settings ----------
@@ -69,7 +69,7 @@ ink.addEventListener("pen", () => {
   }
 });
 if (settings.style) {
-  for (const k of ["pen", "highlighter"]) if (settings.style[k]) ink.style[k] = { ...ink.style[k], ...settings.style[k] };
+  for (const k of ["pen", "highlighter", "eraser"]) if (settings.style[k]) ink.style[k] = { ...ink.style[k], ...settings.style[k] };
 }
 ink.setTool(settings.tool || "pen");
 
@@ -281,8 +281,8 @@ function updateSyncLine() {
   }
   const where = settings.storage === "gdrive" ? t("lineDrive") : `${t("lineGitHub")} · ${settings.github.owner}/${settings.github.repo}`;
   const last = settings.lastSync?.[settings.storage];
-  el.dataset.state = last ? "ok" : "never";
-  el.textContent = `${where} · ${last ? agoLabel(last) : t("lineNever")}`;
+  el.dataset.state = syncProblem ? "error" : last ? "ok" : "never";
+  el.textContent = `${where} · ${syncProblem || (last ? agoLabel(last) : t("lineNever"))}`;
 }
 setInterval(updateSyncLine, 60_000);
 
@@ -306,6 +306,7 @@ renameDialog.addEventListener("close", async () => {
   await db.put("docs", { ...fresh, name, updatedAt: Date.now() });
   await renderLibrary();
   toast(t("renamed"));
+  markDirty();
 });
 
 async function ensureThumb(d) {
@@ -351,7 +352,7 @@ async function importFiles(fileList) {
     added++;
     lastId = id;
   }
-  if (added) { toast(t("added", added)); requestPersistence(); }
+  if (added) { toast(t("added", added)); requestPersistence(); markDirty(); }
   await renderLibrary();
   if (files.length === 1 && lastId) await openDoc(lastId);
 }
@@ -364,6 +365,7 @@ async function deleteDoc(d) {
   if (d.synced) await db.put("docs", { id: d.id, name: d.name, deleted: true, synced: d.synced });
   else await db.del("docs", d.id);
   await renderLibrary();
+  markDirty();
 }
 
 // ---------- reader ----------
@@ -383,8 +385,10 @@ async function openDoc(id) {
   $("#doc-title").textContent = d.name;
   document.title = `${d.name} · Penmit PDF`;
   const view = d.view || {};
-  await viewer.load(pdf, { layout: view.layout || settings.layout, zoom: view.zoom || 1, page: view.page || 0 });
-  ink.setModel((await db.get("ink", id)) || emptyInk(id));
+  const model = (await db.get("ink", id)) || emptyInk(id);
+  await viewer.load(pdf, { layout: view.layout || settings.layout, zoom: view.zoom || 1, page: view.page || 0, blanks: blankPages(model) });
+  ink.setModel(model);
+  closePanel();
   syncLayoutButtons();
   syncZoomLabel();
   syncPageIndicator(viewer.currentPage());
@@ -396,6 +400,7 @@ async function openDoc(id) {
 async function closeDoc() {
   if (!current) return;
   exitFullscreen();
+  closePanel();
   await flushInk();
   const d = (await db.get("docs", current.id)) || current.doc;
   await db.put("docs", { ...d, view: { layout: viewer.layout, zoom: viewer.zoom, page: viewer.currentPage() } });
@@ -405,24 +410,40 @@ async function closeDoc() {
   document.title = "Penmit PDF";
   show("library");
   await renderLibrary();
-  if (storageReady() && inkDirty) runSync({ quiet: true });
+  if (autoSyncOn() && inkDirty) runSync({ quiet: true });
 }
 
 // Save handwriting shortly after each change, and right away when the app is hidden.
 let saveTimer = 0;
 let inkDirty = false;
 ink.addEventListener("change", () => {
-  inkDirty = true;
+  markDirty();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flushInk, 400);
+  scheduleThumbRefresh();
 });
+ink.addEventListener("pages", () => {
+  viewer.setBlankPages(blankPages(ink.model), ink.focusKey);
+  syncPageIndicator(viewer.currentPage());
+  if (panelOpen) renderThumbs();
+});
+ink.addEventListener("selection", renderSelectionBar);
 ink.addEventListener("history", syncHistoryButtons);
 async function flushInk() {
   clearTimeout(saveTimer);
   if (current && ink.model) await db.put("ink", ink.model);
 }
-document.addEventListener("visibilitychange", () => { if (document.hidden) flushInk(); });
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden) {
+    await flushInk();
+    // Leaving the app: send unsynced changes now (best effort).
+    if (autoSyncOn() && inkDirty && !syncing) runSync({ quiet: true });
+  } else if (autoSyncOn() && Date.now() - (settings.lastSync?.[settings.storage] || 0) > 60_000) {
+    scheduleAutoSync(800);
+  }
+});
 window.addEventListener("pagehide", () => { flushInk(); });
+window.addEventListener("online", () => { if (inkDirty) scheduleAutoSync(1500); });
 
 function syncHistoryButtons() {
   $("#fs-undo").disabled = !ink.canUndo;
@@ -520,6 +541,211 @@ $("#scroller").addEventListener("pointerup", (e) => {
   }
 });
 
+// ---------- pages panel: thumbnails, the PDF's contents, blank pages ----------
+let panelOpen = false;
+let panelTab = "thumbs";
+let thumbIO = null;
+const narrow = () => window.matchMedia("(max-width: 699px)").matches;
+const keyFromString = (s) => (/^\d+$/.test(s) ? Number(s) : s);
+
+function relayoutKeepingPage() {
+  if (!viewer.pages.length) return;
+  const page = viewer.currentPage();
+  viewer.relayout();
+  viewer.scrollToPage(page, false);
+}
+function openPanel() {
+  if (panelOpen || !current) return;
+  panelOpen = true;
+  closeMenu();
+  $("#pages-panel").hidden = false;
+  $("#reader").classList.add("panel-open");
+  $("#pages-btn").setAttribute("aria-expanded", "true");
+  if (!narrow()) relayoutKeepingPage();
+  renderPanel();
+}
+function closePanel() {
+  if (!panelOpen) return;
+  panelOpen = false;
+  thumbIO?.disconnect();
+  $("#pages-panel").hidden = true;
+  $("#reader").classList.remove("panel-open");
+  $("#pages-btn").setAttribute("aria-expanded", "false");
+  if (current && !narrow()) relayoutKeepingPage();
+}
+$("#pages-btn").addEventListener("click", () => (panelOpen ? closePanel() : openPanel()));
+$("#pp-close").addEventListener("click", closePanel);
+for (const tab of document.querySelectorAll("[data-pp]")) {
+  tab.addEventListener("click", () => { panelTab = tab.dataset.pp; renderPanel(); });
+}
+function renderPanel() {
+  for (const tab of document.querySelectorAll("[data-pp]")) tab.setAttribute("aria-selected", String(tab.dataset.pp === panelTab));
+  $("#thumbs").hidden = panelTab !== "thumbs";
+  $("#outline").hidden = panelTab !== "outline";
+  $("#add-blank").parentElement.hidden = panelTab !== "thumbs";
+  if (panelTab === "thumbs") renderThumbs(); else renderOutline();
+}
+function goToPageFromPanel(index) {
+  viewer.scrollToPage(index, false);
+  if (narrow()) closePanel();
+}
+
+const MORE_ICON = '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="18" cy="12" r="1.3"/></svg>';
+function thumbMenu(p) {
+  const items = [{ label: t("addBlankAfter"), action: "add-blank", run: () => addBlankAfter(p.key) }];
+  if (p.blank) {
+    items.push("-", {
+      label: t("removeBlank"), action: "remove-blank", danger: true,
+      run: () => { if (!ink.strokeCount(p.key) || confirm(t("confirmRemoveBlank"))) ink.removeBlankPage(p.key); },
+    });
+  }
+  return items;
+}
+function renderThumbs() {
+  if (!panelOpen || panelTab !== "thumbs") return;
+  const list = $("#thumbs");
+  list.textContent = "";
+  thumbIO?.disconnect();
+  thumbIO = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) drawThumb(e.target);
+  }, { root: $("#pp-body"), rootMargin: "300px 0px" });
+  const cur = viewer.currentPage();
+  for (const p of viewer.pages) {
+    const li = document.createElement("li");
+    li.className = `thumb${p.index === cur ? " current" : ""}`;
+    li.dataset.key = String(p.key);
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "thumb-btn";
+    open.setAttribute("aria-label", p.blank ? `${t("pageLabel", p.index + 1)} (${t("blankLabel")})` : t("pageLabel", p.index + 1));
+    const img = document.createElement("div");
+    img.className = "thumb-img";
+    const canvas = document.createElement("canvas");
+    canvas.width = 3;
+    canvas.height = 4;
+    img.append(canvas);
+    open.append(img);
+    open.addEventListener("click", () => goToPageFromPanel(p.index));
+    const label = document.createElement("div");
+    label.className = "thumb-label";
+    const num = document.createElement("span");
+    num.textContent = String(p.index + 1);
+    label.append(num);
+    if (p.blank) {
+      const small = document.createElement("small");
+      small.textContent = ` · ${t("blankLabel")}`;
+      label.append(small);
+    }
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "thumb-more";
+    more.setAttribute("aria-haspopup", "menu");
+    more.setAttribute("aria-expanded", "false");
+    more.setAttribute("aria-label", `${t("more")}: ${t("pageLabel", p.index + 1)}`);
+    more.innerHTML = MORE_ICON;
+    more.addEventListener("click", () => toggleMenu(thumbMenu(p), more));
+    label.append(more);
+    li.addEventListener("contextmenu", (e) => { e.preventDefault(); showMenu(buildMenu(thumbMenu(p)), more, { x: e.clientX, y: e.clientY }); });
+    li.append(open, label);
+    list.append(li);
+    thumbIO.observe(li);
+  }
+  list.querySelector(".thumb.current")?.scrollIntoView({ block: "center" });
+}
+async function drawThumb(li, force = false) {
+  if (li.dataset.drawn === "1" && !force) return;
+  li.dataset.drawn = "1";
+  const p = viewer.byKey.get(keyFromString(li.dataset.key));
+  if (!p || !ink.model) return;
+  const width = 240;
+  const scale = width / p.w;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = Math.max(1, Math.round(p.h * scale));
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  let T = [scale, 0, 0, -scale, 0, p.h * scale];
+  if (!p.blank) {
+    const vp = p.proxy.getViewport({ scale });
+    T = vp.transform;
+    try { await p.proxy.render({ canvasContext: ctx, viewport: vp, background: "#ffffff" }).promise; } catch { return; }
+  }
+  ctx.setTransform(...T);
+  for (const s of ink.byPage.get(p.key) || []) drawStroke(ctx, s);
+  li.querySelector(".thumb-img canvas")?.replaceWith(canvas);
+}
+// Keep the thumbnails of the pages being written on up to date.
+let thumbTimer = 0;
+function scheduleThumbRefresh() {
+  if (!panelOpen || panelTab !== "thumbs") return;
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(() => {
+    for (const p of viewer.visible) {
+      const li = $(`#thumbs .thumb[data-key="${CSS.escape(String(p.key))}"]`);
+      if (li) drawThumb(li, true);
+    }
+  }, 700);
+}
+viewer.addEventListener("pagechange", (e) => {
+  if (!panelOpen) return;
+  for (const li of document.querySelectorAll("#thumbs .thumb")) {
+    const p = viewer.byKey.get(keyFromString(li.dataset.key));
+    li.classList.toggle("current", p?.index === e.detail);
+  }
+});
+
+function addBlankAfter(key) {
+  const newKey = ink.addBlankPage(key);
+  const p = newKey && viewer.byKey.get(newKey);
+  if (p) toast(t("blankAdded", p.index + 1));
+}
+$("#add-blank").addEventListener("click", () => {
+  const p = viewer.pages[viewer.currentPage()];
+  if (p) addBlankAfter(p.key);
+});
+
+async function renderOutline() {
+  const box = $("#outline");
+  box.textContent = "";
+  let items = null;
+  try { items = await viewer.pdf?.getOutline(); } catch { items = null; }
+  if (!items?.length) {
+    const empty = document.createElement("p");
+    empty.className = "outline-empty";
+    empty.textContent = t("noOutline");
+    box.append(empty);
+    return;
+  }
+  const list = (entries) => {
+    const ul = document.createElement("ul");
+    for (const item of entries) {
+      const li = document.createElement("li");
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = item.title || "—";
+      b.addEventListener("click", () => goToDest(item.dest));
+      li.append(b);
+      if (item.items?.length) li.append(list(item.items));
+      ul.append(li);
+    }
+    return ul;
+  };
+  box.append(list(items));
+}
+async function goToDest(dest) {
+  const pdf = viewer.pdf;
+  if (!pdf || !dest) return;
+  try {
+    const explicit = typeof dest === "string" ? await pdf.getDestination(dest) : dest;
+    if (!Array.isArray(explicit)) return;
+    const ref = explicit[0];
+    const index = typeof ref === "number" ? ref : await pdf.getPageIndex(ref);
+    const p = viewer.byKey.get(index);
+    if (p) goToPageFromPanel(p.index);
+  } catch { /* a broken link in the PDF */ }
+}
+
 // ---------- go to page ----------
 const gotoDialog = $("#goto");
 const gotoInput = $("#goto-form").elements.namedItem("page");
@@ -567,6 +793,23 @@ function renderToolbar() {
   const bar = $("#toolbar");
   bar.classList.toggle("eraser-mode", tool === "eraser");
   bar.classList.toggle("hand-mode", tool === "hand");
+  bar.classList.toggle("lasso-mode", tool === "lasso");
+  for (const b of document.querySelectorAll("[data-erase]")) b.setAttribute("aria-checked", String(b.dataset.erase === ink.style.eraser.mode));
+  const sizes = $("#eraser-sizes");
+  sizes.textContent = "";
+  ERASER_SIZES.forEach((_, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "width";
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(i === ink.style.eraser.size));
+    b.setAttribute("aria-label", `${t("eraserSize")} ${i + 1}`);
+    const dot = document.createElement("span");
+    dot.style.width = dot.style.height = `${[7, 11, 17][i]}px`;
+    b.append(dot);
+    b.addEventListener("click", () => { ink.style.eraser.size = i; persistStyle(); renderToolbar(); });
+    sizes.append(b);
+  });
   const kind = tool === "highlighter" ? "highlighter" : "pen";
   const style = ink.style[kind];
   $(".tool[data-tool=pen] .tool-color").style.setProperty("--c", ink.style.pen.color);
@@ -604,9 +847,48 @@ function renderToolbar() {
   });
 }
 function persistStyle() {
-  settings.style = { pen: ink.style.pen, highlighter: ink.style.highlighter };
+  settings.style = { pen: ink.style.pen, highlighter: ink.style.highlighter, eraser: ink.style.eraser };
   saveSettings();
 }
+for (const b of document.querySelectorAll("[data-erase]")) {
+  b.addEventListener("click", () => { ink.style.eraser.mode = b.dataset.erase; persistStyle(); renderToolbar(); });
+}
+
+// Buttons over a lasso selection: colours, duplicate, delete.
+const SEL_ICON = {
+  copy: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>',
+  trash: '<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4.5h4V7M7 7l1 13h8l1-13"/></svg>',
+};
+function renderSelectionBar() {
+  const sel = ink.selection;
+  if (!sel) return;
+  const bar = sel.bar;
+  bar.textContent = "";
+  const button = (label, html, run, cls = "") => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.innerHTML = html;
+    b.addEventListener("click", run);
+    bar.append(b);
+    return b;
+  };
+  PEN_COLORS.forEach((c, i) => {
+    const b = button(t("selColor", i + 1), "", () => ink.recolorSelection(i), "sel-color");
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.setProperty("--c", c);
+    b.append(dot);
+  });
+  const sep = document.createElement("span");
+  sep.className = "sep";
+  bar.append(sep);
+  button(t("selDuplicate"), SEL_ICON.copy, () => ink.duplicateSelection(), "sel-duplicate");
+  button(t("selDelete"), SEL_ICON.trash, () => ink.deleteSelection(), "sel-delete danger");
+}
+
 function selectTool(tool) {
   ink.setTool(tool);
   settings.tool = tool;
@@ -630,7 +912,7 @@ async function exportDoc(id) {
 async function exportPdf(pdfBytes, model, name) {
   toast(t("exporting"), { ms: 60_000 });
   try {
-    const bytes = await exportAnnotated(pdfBytes, strokesByPage(model));
+    const bytes = await exportAnnotated(pdfBytes, strokesByPage(model), blankPages(model));
     const base = name.replace(/\.pdf$/i, "");
     const saved = await saveFile(`${base} (Penmit).pdf`, bytes);
     if (saved !== false) toast(t("exported")); else $("#toast").hidden = true;
@@ -667,6 +949,35 @@ const store = {
 };
 
 let syncing = false;
+let syncProblem = null; // what went wrong in the last automatic sync, shown instead of a toast
+
+// Automatic sync: a little after the last change, when the app comes back, and when it goes
+// to the background. Never more often than MIN_GAP, so a GitHub history isn't one commit per stroke.
+const AUTO_DELAY = 20_000;
+const MIN_GAP = 45_000;
+let changeSeq = 0;
+let autoTimer = 0;
+let lastAuto = 0;
+const autoSyncOn = () => settings.autoSync !== false && storageReady();
+function markDirty() {
+  inkDirty = true;
+  changeSeq++;
+  scheduleAutoSync();
+}
+function scheduleAutoSync(delay = AUTO_DELAY) {
+  if (!autoSyncOn()) return;
+  clearTimeout(autoTimer);
+  autoTimer = setTimeout(autoSync, delay);
+}
+async function autoSync() {
+  if (!autoSyncOn() || !navigator.onLine) return;
+  if (syncing || ink.active || ink.xform) { scheduleAutoSync(5_000); return; }
+  const wait = MIN_GAP - (Date.now() - lastAuto);
+  if (wait > 0) { scheduleAutoSync(wait); return; }
+  lastAuto = Date.now();
+  await runSync({ quiet: true });
+}
+
 function describeError(e, storage = settings.storage) {
   if (e.tooLarge) return t("errTooLarge", e.tooLarge);
   if (e instanceof NeedsGoogleSignIn) return t("googleNeedsSignIn");
@@ -679,6 +990,12 @@ function describeError(e, storage = settings.storage) {
     default: return e.message || String(e);
   }
 }
+function setSyncProblem(problem) {
+  syncProblem = problem;
+  $("#reader-sync").classList.toggle("attention", Boolean(problem));
+  $("#lib-sync").classList.toggle("attention", Boolean(problem));
+  updateSyncLine();
+}
 function setSyncBusy(busy) {
   for (const b of [$("#lib-sync"), $("#reader-sync")]) { b.classList.toggle("spin", busy); b.disabled = busy; }
 }
@@ -689,9 +1006,11 @@ async function runSync({ quiet = false } = {}) {
     return;
   }
   if (settings.storage === "gdrive" && !(await googleAuth.signedIn())) {
-    if (!quiet) { toast(t("googleNeedsSignIn")); openSettings(); }
+    if (quiet) setSyncProblem(t("lineSignIn"));
+    else { toast(t("googleNeedsSignIn")); openSettings(); }
     return;
   }
+  const seq = changeSeq;
   const backend = settings.storage === "gdrive" ? new DriveBackend() : new GitHubBackend(settings.github);
   syncing = true;
   setSyncBusy(true);
@@ -699,7 +1018,9 @@ async function runSync({ quiet = false } = {}) {
   try {
     await flushInk();
     const stats = await sync(backend, store);
-    inkDirty = false;
+    // Changes made while syncing go out next time.
+    if (changeSeq === seq) inkDirty = false; else scheduleAutoSync();
+    setSyncProblem(null);
     settings.lastSync = { ...settings.lastSync, [settings.storage]: Date.now() };
     saveSettings();
     updateSyncLine();
@@ -707,7 +1028,8 @@ async function runSync({ quiet = false } = {}) {
     if (!current) await renderLibrary();
   } catch (e) {
     console.error(e);
-    toast(t("syncFailed", describeError(e)), { error: true, ms: 6000 });
+    if (quiet) setSyncProblem(e instanceof NeedsGoogleSignIn || e.status === 401 && settings.storage === "gdrive" ? t("lineSignIn") : t("lineFailed"));
+    else toast(t("syncFailed", describeError(e)), { error: true, ms: 6000 });
   } finally {
     syncing = false;
     setSyncBusy(false);
@@ -722,6 +1044,7 @@ const form = $("#settings-form");
 function showStoragePanels() {
   const choice = form.storage.value;
   $("#gdrive-panel").hidden = choice !== "gdrive";
+  $("#autosync-group").hidden = !choice || choice === "none";
   $("#github-panel").hidden = choice !== "github";
   if (choice === "gdrive") refreshGoogleStatus();
 }
@@ -754,6 +1077,7 @@ function openSettings() {
   form.token.value = g.token;
   form.storage.value = settings.storage;
   form.fingerDraw.checked = fingerDraws();
+  form.autoSync.checked = settings.autoSync !== false;
   $("#github-status").textContent = "";
   $("#version").textContent = VERSION;
   showStoragePanels();
@@ -770,6 +1094,9 @@ dialog.addEventListener("close", () => {
     token: form.token.value.trim(),
   };
   settings.storage = form.storage.value || "none";
+  settings.autoSync = form.autoSync.checked;
+  setSyncProblem(null);
+  if (autoSyncOn()) scheduleAutoSync(2_000);
   // Keep "auto" unless the switch was actually changed.
   if (form.fingerDraw.checked !== fingerDraws()) settings.fingerMode = form.fingerDraw.checked ? "on" : "off";
   ink.setFingerDraw(fingerDraws());
@@ -847,6 +1174,10 @@ document.addEventListener("keydown", (e) => {
   if (!current || dialog.open || renameDialog.open || gotoDialog.open || e.target.closest?.("input, textarea")) return;
   const mod = e.ctrlKey || e.metaKey;
   const k = e.key.toLowerCase();
+  if (ink.selection) {
+    if (e.key === "Escape") { ink.clearSelection(); return; }
+    if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); ink.deleteSelection(); return; }
+  }
   if (fullscreen && !mod) {
     const step = { ArrowRight: 1, ArrowDown: 1, PageDown: 1, " ": 1, ArrowLeft: -1, ArrowUp: -1, PageUp: -1 }[e.key];
     if (step) { e.preventDefault(); viewer.stepRow(e.shiftKey && e.key === " " ? -1 : step); return; }
@@ -859,7 +1190,7 @@ document.addEventListener("keydown", (e) => {
   else if (mod && k === "-") { e.preventDefault(); viewer.setZoom(viewer.zoom / ZOOM_STEP); }
   else if (mod && k === "0") { e.preventDefault(); viewer.setZoom(1); }
   else if (!mod && !e.altKey) {
-    const tool = { v: "hand", p: "pen", h: "highlighter", e: "eraser" }[k];
+    const tool = { v: "hand", p: "pen", h: "highlighter", e: "eraser", l: "lasso" }[k];
     if (tool) selectTool(tool);
   }
 });
@@ -886,6 +1217,7 @@ function start() {
   show("library");
   updateSyncLine();
   renderLibrary();
+  if (autoSyncOn()) scheduleAutoSync(1_500);
   registerServiceWorker();
   if (back?.redirect) {
     if (back.ok) {

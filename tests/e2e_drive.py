@@ -206,16 +206,20 @@ window.penmitDesktop = {
 """
 
 
-def device(browser, name, block_popups=False, desktop=False):
+def device(browser, name, block_popups=False, desktop=False, auto=False):
     ctx = browser.new_context(viewport={"width": 1100, "height": 850}, locale="ko-KR")
     for host in ("https://www.googleapis.com/**", "https://accounts.google.com/**", "https://oauth2.googleapis.com/**"):
         ctx.route(host, handle_google)
     ctx.route("https://api.github.com/**", lambda r, q: r.abort())
+    # These tests sync by hand; automatic sync is tested on its own.
+    if not auto: ctx.add_init_script("if (!localStorage.getItem('penmit.settings')) localStorage.setItem('penmit.settings', JSON.stringify({ autoSync: false }));")
     if block_popups:
         ctx.add_init_script("window.open = () => null;")
     if desktop:
         ctx.add_init_script(FAKE_DESKTOP)
     page = ctx.new_page()
+    if auto:
+        page.clock.install()
     page.errors = []
     page.on("pageerror", lambda e: (page.errors.append(str(e)), print(f"[{name}] PAGEERROR", e)))
     page.goto(f"{ORIGIN}/")
@@ -408,7 +412,27 @@ with sync_playwright() as p:
     big_ink = json.loads(drive.tree()[big_id]["ink.json"])
     check(len(big_ink["strokes"]) == 1 and "올림" in toast, f"desktop: its stroke reached Drive: {toast}")
 
-    check(not (A.errors or B.errors or C.errors or D.errors), f"no page errors {A.errors + B.errors + C.errors + D.errors}")
+    # Automatic sync on the web: when the Google sign-in runs out, it says so quietly (no pop-up,
+    # no error message over the page) and the sync button gets a red dot.
+    F = device(b, "F", auto=True)
+    sign_in_popup(F)
+    F.clock.run_for(5_000)
+    F.wait_for_function("() => document.querySelector('#sync-line').dataset.state === 'ok'", timeout=15000)
+    check(F.locator(".doc").count() == 1, "automatic sync brought the PDF right after signing in")
+    drive.tokens.clear()
+    F.locator(".doc-open").first.click()
+    F.wait_for_selector("#reader:not([hidden])")
+    F.wait_for_timeout(900)
+    pen(F, 0, 0.5, 0.5)
+    F.clock.run_for(60_000)
+    F.wait_for_function("() => document.querySelector('#reader-sync').classList.contains('attention')", timeout=15000)
+    check(F.locator("#toast").is_hidden() or "실패" not in F.locator("#toast").inner_text(), "no error message pops up for an automatic sync")
+    F.locator("#back").click()
+    F.wait_for_selector("#library:not([hidden])")
+    line = F.locator("#sync-line").inner_text()
+    check("구글 로그인 필요" in line and F.evaluate("document.querySelector('#sync-line').dataset.state") == "error", f"the sync line asks to sign in again ({line})")
+
+    check(not (A.errors or B.errors or C.errors or D.errors or F.errors), f"no page errors {A.errors + B.errors + C.errors + D.errors + F.errors}")
     b.close()
 
 srv.shutdown()

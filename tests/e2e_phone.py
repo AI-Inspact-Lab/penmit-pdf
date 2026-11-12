@@ -105,6 +105,25 @@ with sync_playwright() as p:
     finger(zig(0.75))
     check(stroke_count() == 2, "after a pen is used, a finger no longer writes")
 
+    # Lasso with the pen, then move the selection with a finger.
+    page.tap(".tool[data-tool=lasso]")
+    bx = page.locator(".page").first.bounding_box()
+    L = lambda fx, fy: (bx["x"] + bx["width"] * fx, bx["y"] + bx["height"] * fy)
+    corners = [L(0.1, 0.55), L(0.75, 0.55), L(0.75, 0.66), L(0.1, 0.66), L(0.1, 0.55)]
+    loop = []
+    for (ax, ay), (bx2, by2) in zip(corners, corners[1:]):
+        loop += [(ax + (bx2 - ax) * i / 8, ay + (by2 - ay) * i / 8) for i in range(9)]
+    pen(loop)
+    page.wait_for_timeout(400)
+    check(page.locator(".selection").count() == 1, "the pen's lasso selected the pen stroke")
+    sb = page.locator(".selection").bounding_box()
+    cx, cy = sb["x"] + sb["width"] / 2, sb["y"] + sb["height"] / 2
+    finger([(cx, cy + i * 8) for i in range(9)])
+    page.wait_for_timeout(500)
+    sb2 = page.locator(".selection").bounding_box()
+    check(abs((sb2["y"] - sb["y"]) - 64) < 6 and stroke_count() == 2, f"a finger drags the selection ({sb2['y'] - sb['y']:.0f}px)")
+    page.tap(".tool[data-tool=pen]")
+
     # The setting shows the new state and can turn finger writing back on for good.
     page.tap("#back")
     page.wait_for_selector("#library:not([hidden])")

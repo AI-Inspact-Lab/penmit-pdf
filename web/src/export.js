@@ -97,7 +97,9 @@ function inkAnnotation(doc, s) {
   return ctx.register(annot);
 }
 
-export async function exportAnnotated(pdfBytes, byPage) {
+// byPage: Map(page key -> strokes), keys being PDF page indexes or "b:<id>" for blank pages.
+// blanks: the inserted blank pages ({ id, after, pos, w, h }), added to the copy in place.
+export async function exportAnnotated(pdfBytes, byPage, blanks = []) {
   let doc;
   try {
     doc = await PDFDocument.load(pdfBytes, { updateMetadata: false });
@@ -105,9 +107,16 @@ export async function exportAnnotated(pdfBytes, byPage) {
     if (/encrypt/i.test(e?.message || "")) throw new EncryptedPdfError(e.message);
     throw e;
   }
-  const pages = doc.getPages();
-  for (const [index, strokes] of byPage) {
-    const page = pages[index];
+  const original = doc.getPages();
+  const n = original.length;
+  const pageFor = new Map(original.map((page, i) => [i, page]));
+  // Same order as on screen: blanks before the first page, then after each page by position.
+  // Inserting in that order, each blank's place is the PDF pages before it plus the blanks before it.
+  const place = (b) => Math.min(Math.max(b.after, -1), n - 1);
+  const sorted = [...blanks].sort((a, b) => place(a) - place(b) || a.pos - b.pos || (a.id < b.id ? -1 : 1));
+  sorted.forEach((b, i) => pageFor.set(`b:${b.id}`, doc.insertPage(place(b) + 1 + i, [b.w, b.h])));
+  for (const [key, strokes] of byPage) {
+    const page = pageFor.get(key);
     if (!page || !strokes.length) continue;
     let annots = page.node.Annots();
     if (!annots) {

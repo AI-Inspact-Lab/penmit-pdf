@@ -133,10 +133,15 @@ def check(cond, msg):
     if not cond: fails.append(msg)
 
 
-def device(browser, name):
+def device(browser, name, auto=False):
     ctx = browser.new_context(viewport={"width": 1100, "height": 850}, locale="ko-KR")
     ctx.route("https://api.github.com/**", handle)
+    if not auto:
+        # These tests sync by hand; automatic sync is tested on its own.
+        ctx.add_init_script("if (!localStorage.getItem('penmit.settings')) localStorage.setItem('penmit.settings', JSON.stringify({ autoSync: false }));")
     page = ctx.new_page()
+    if auto:
+        page.clock.install()
     page.on("pageerror", lambda e: print(f"[{name}] PAGEERROR", e))
     page.goto(f"http://localhost:{PORT}/")
     page.wait_for_selector("#library:not([hidden])")
@@ -286,6 +291,53 @@ with sync_playwright() as p:
     B.wait_for_function("() => document.querySelector('#github-status').classList.contains('bad')")
     check("토큰" in B.locator("#github-status").inner_text(), f"bad token message: {B.locator('#github-status').inner_text()}")
     B.locator("#settings button[value=cancel]").last.click()
+
+    # Automatic sync (on by default): a little after writing stops, never more than once per 45 s.
+    def wait_until(fn, page, timeout=15):
+        for _ in range(int(timeout * 4)):
+            if fn(): return True
+            page.wait_for_timeout(250)
+        return False
+
+    E = device(b, "E", auto=True)
+    configure(E)
+    check(E.locator("input[name=autoSync]").count() == 1, "settings have an automatic sync switch")
+    E.set_input_files("#file-input", S + "test.pdf")
+    E.wait_for_selector("#reader:not([hidden])")
+    E.wait_for_timeout(1000)
+    pen(E, 0, 0.2, 0.3)
+    E.clock.run_for(5_000)
+    E.wait_for_timeout(1000)
+    check(remote_ink() is None, "nothing is sent while still writing")
+    E.clock.run_for(50_000)
+    ok = wait_until(lambda: (remote_ink() or {}).get("strokes") and len(remote_ink()["strokes"]) == 1, E)
+    check(ok, f"synced by itself after writing stopped ({remote_ink()})")
+
+    # A blank page with writing on it, synced automatically, then opened on B.
+    E.locator("#pages-btn").click()
+    E.wait_for_timeout(500)
+    E.locator("#add-blank").click()
+    E.wait_for_timeout(900)
+    blank_index = int(E.locator("#page-ind").inner_text().split("/")[0]) - 1
+    pen(E, blank_index, 0.3, 0.3)
+    E.clock.run_for(50_000)
+    def remote_blank():
+        r = repos["me/notes"]
+        files = [f for f in r.files() if f.endswith("ink.json")]
+        if not files: return False
+        raw = json.loads(r.read(files[0]))
+        blanks = list((raw.get("pages") or {}).keys())
+        return len(blanks) == 1 and any(s["page"] == f"b:{blanks[0]}" for s in raw["strokes"].values())
+    check(wait_until(remote_blank, E), "the blank page and its writing reached GitHub by themselves")
+    line = E.evaluate("document.querySelector('#sync-line').dataset.state")
+    check(line == "ok", f"the sync line says synced ({line})")
+    do_sync(B)
+    B.locator(".doc-open").first.click()
+    B.wait_for_selector("#reader:not([hidden])")
+    B.wait_for_timeout(1200)
+    check(B.locator(".page").count() == 7 and B.locator(".page.blank-page").count() == 1, "B shows the blank page added on E")
+    b_ink = B.evaluate(READ_INK)
+    check(any(len(i["strokes"]) == 2 for i in b_ink["ink"]), f"and the writing on it ({b_ink['ink']})")
     b.close()
 
 srv.shutdown()

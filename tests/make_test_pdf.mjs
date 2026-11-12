@@ -1,5 +1,6 @@
-// Writes tests/out/test.pdf: six pages, one landscape (4) and one rotated 90 degrees (5).
-import { PDFDocument, StandardFonts, rgb, degrees } from "../web/vendor/pdf-lib/pdf-lib.esm.min.js";
+// Writes tests/out/test.pdf: six pages, one landscape (4) and one rotated 90 degrees (5), with a
+// table of contents ("Part A" -> page 3, "Part B" -> page 5, which has "Part B.1" -> page 6).
+import { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFHexString } from "../web/vendor/pdf-lib/pdf-lib.esm.min.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const doc = await PDFDocument.create();
@@ -12,6 +13,18 @@ for (let i = 1; i <= 6; i++) {
   page.drawText(`Test page ${i}${i === 5 ? " (rotated 90)" : ""}${landscape ? " (landscape)" : ""}`, { x: 60, y: height - 80, size: 28, font, color: rgb(0.1, 0.1, 0.2) });
   for (let l = 0; l < 18; l++) page.drawText("The quick brown fox jumps over the lazy dog. 0123456789", { x: 60, y: height - 140 - l * 26, size: 13, font, color: rgb(0.25, 0.25, 0.3) });
   page.drawRectangle({ x: 60, y: 80, width: width - 120, height: 60, borderColor: rgb(0.2, 0.4, 0.8), borderWidth: 2 });
+}
+{
+  const ctx = doc.context;
+  const pages = doc.getPages();
+  const dest = (i) => [pages[i].ref, PDFName.of("Fit")];
+  const outlinesRef = ctx.nextRef();
+  const aRef = ctx.nextRef(), bRef = ctx.nextRef(), b1Ref = ctx.nextRef();
+  ctx.assign(aRef, ctx.obj({ Title: PDFHexString.fromText("Part A"), Parent: outlinesRef, Next: bRef, Dest: dest(2) }));
+  ctx.assign(bRef, ctx.obj({ Title: PDFHexString.fromText("Part B"), Parent: outlinesRef, Prev: aRef, First: b1Ref, Last: b1Ref, Count: 1, Dest: dest(4) }));
+  ctx.assign(b1Ref, ctx.obj({ Title: PDFHexString.fromText("Part B.1"), Parent: bRef, Dest: dest(5) }));
+  ctx.assign(outlinesRef, ctx.obj({ Type: "Outlines", First: aRef, Last: bRef, Count: 3 }));
+  doc.catalog.set(PDFName.of("Outlines"), outlinesRef);
 }
 mkdirSync(new URL("./out/", import.meta.url), { recursive: true });
 writeFileSync(new URL("./out/test.pdf", import.meta.url), await doc.save());
