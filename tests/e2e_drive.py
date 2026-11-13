@@ -233,7 +233,7 @@ def wait_status(page, cls="ok"):
     return page.locator("#gdrive-status").inner_text()
 
 
-def sign_in_popup(page):
+def sign_in_popup(page, save=True):
     page.locator("#lib-settings").click()
     page.locator("input[name=storage][value=gdrive]").check()
     check(page.locator("#gdrive-panel").is_visible() and not page.locator("#github-panel").is_visible(), "choosing Google Drive shows only the Drive panel")
@@ -244,7 +244,7 @@ def sign_in_popup(page):
     popup = pop.value
     popup.wait_for_event("close", timeout=10000)
     status = wait_status(page)
-    page.locator("#settings button[value=save]").click()
+    page.locator("#settings button[value=save]" if save else "#settings button[value=cancel]").click()
     return status
 
 
@@ -414,11 +414,12 @@ with sync_playwright() as p:
 
     # Automatic sync on the web: when the Google sign-in runs out, it says so quietly (no pop-up,
     # no error message over the page) and the sync button gets a red dot.
+    # Signing in starts the first sync even when the settings are closed without "Save".
     F = device(b, "F", auto=True)
-    sign_in_popup(F)
+    sign_in_popup(F, save=False)
     F.clock.run_for(5_000)
     F.wait_for_function("() => document.querySelector('#sync-line').dataset.state === 'ok'", timeout=15000)
-    check(F.locator(".doc").count() == 1, "automatic sync brought the PDF right after signing in")
+    check(F.locator(".doc").count() == 1, "automatic sync brought the PDF right after signing in, without pressing Save")
     drive.tokens.clear()
     F.locator(".doc-open").first.click()
     F.wait_for_selector("#reader:not([hidden])")

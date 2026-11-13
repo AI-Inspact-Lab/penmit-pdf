@@ -1122,6 +1122,8 @@ $("#google-sign-in").addEventListener("click", () => {
     saveSettings();
     updateSyncLine();
     refreshGoogleStatus();
+    // The first sync starts on its own, even if the settings are closed without "Save".
+    if (autoSyncOn()) scheduleAutoSync(1_500);
   }).catch((e) => {
     status.textContent = t("googleSignInFailed", e.message);
     status.classList.add("bad");
@@ -1234,6 +1236,7 @@ function start() {
       settings.storage = "gdrive";
       saveSettings();
       updateSyncLine();
+      if (autoSyncOn()) scheduleAutoSync(1_500);
       if (back.after === "settings") openSettings();
     } else {
       toast(t("googleSignInFailed", "access_denied"), { error: true });
