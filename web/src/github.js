@@ -62,7 +62,7 @@ export class GitHub {
 
   // An empty repository has no commit to build on; the contents API can make the first one.
   async bootstrap() {
-    const readme = "# Penmit PDF notes\n\nPDFs and handwriting synced by [Penmit PDF](https://github.com/AI-Inspact-Lab/penmit-pdf).\nEach folder under `penmit/` is one PDF: `document.pdf`, `meta.json` and `ink.json`.\n";
+    const readme = "# Penmit PDF notes\n\nPDFs and handwriting synced by [Penmit PDF](https://github.com/Choo-AI-Dev/penmit-pdf).\nEach folder under `penmit/` is one PDF: `document.pdf`, `meta.json` and `ink.json`.\n";
     const body = { message: "Start Penmit PDF notes", content: await bytesToBase64(enc.encode(readme)) };
     try {
       await this.api(`/contents/README.md`, { method: "PUT", body: { ...body, branch: this.branch } });

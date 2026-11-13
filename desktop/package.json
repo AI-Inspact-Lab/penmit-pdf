@@ -3,10 +3,10 @@
   "productName": "Penmit PDF",
   "version": "0.5.2",
   "description": "Read and handwrite on PDFs, synced through your own Google Drive or GitHub.",
-  "homepage": "https://github.com/AI-Inspact-Lab/penmit-pdf",
+  "homepage": "https://github.com/Choo-AI-Dev/penmit-pdf",
   "author": {
-    "name": "AI-Inspact-Lab",
-    "email": "227103098+AI-Inspact-Lab@users.noreply.github.com"
+    "name": "Choo-AI-Dev",
+    "email": "227103098+Choo-AI-Dev@users.noreply.github.com"
   },
   "license": "Apache-2.0",
   "private": true,

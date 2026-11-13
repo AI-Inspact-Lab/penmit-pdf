@@ -4,7 +4,7 @@
 <br>
 Read and handwrite on PDFs on any device, and keep them in **your own Google Drive or GitHub**.
 
-[한국어](#한국어) · [English](#english) · [다운로드 · Download](https://github.com/AI-Inspact-Lab/penmit-pdf/releases) · [웹에서 열기 · Open in the browser](https://ai-inspact-lab.github.io/penmit-pdf/)
+[한국어](#한국어) · [English](#english) · [다운로드 · Download](https://github.com/Choo-AI-Dev/penmit-pdf/releases) · [웹에서 열기 · Open in the browser](https://choo-ai-dev.github.io/penmit-pdf/)
 
 ---
 
@@ -26,8 +26,8 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 
 | 기기 | 방법 |
 | --- | --- |
-| 아이폰·아이패드 | 사파리에서 [웹앱](https://ai-inspact-lab.github.io/penmit-pdf/)을 열고 공유 → **홈 화면에 추가** |
-| 윈도우 | [Releases](https://github.com/AI-Inspact-Lab/penmit-pdf/releases)에서 `Penmit-PDF-Setup-x.y.z.exe` (설치형) 또는 `-portable.exe` |
+| 아이폰·아이패드 | 사파리에서 [웹앱](https://choo-ai-dev.github.io/penmit-pdf/)을 열고 공유 → **홈 화면에 추가** |
+| 윈도우 | [Releases](https://github.com/Choo-AI-Dev/penmit-pdf/releases)에서 `Penmit-PDF-Setup-x.y.z.exe` (설치형) 또는 `-portable.exe` |
 | 리눅스 | `Penmit-PDF-x.y.z-x86_64.AppImage` 또는 `.deb` |
 | 안드로이드 | `Penmit-PDF-x.y.z.apk` ('출처를 알 수 없는 앱' 설치 허용) |
 | 그 밖의 기기 | 크롬·엣지·사파리에서 웹앱을 열면 돼요 |
@@ -96,7 +96,7 @@ Read and handwrite on PDFs on any device, and keep them in **your own Google Dri
 - 서버가 없어요. PDF와 필기는 기기 안(IndexedDB)과 내가 고른 구글 드라이브나 GitHub 저장소에만 있어요. 개발자는 아무것도 받지 않아요.
 - 로그인 정보와 토큰은 그 기기에만 보관돼요. 공용 컴퓨터에서는 쓰지 마세요.
 - GitHub 토큰은 저장소 하나, Contents 권한 하나만 주세요. 유출되더라도 그 저장소 밖으로는 영향이 없어요.
-- 자세한 내용: [개인정보처리방침](https://ai-inspact-lab.github.io/penmit-pdf/privacy.html)
+- 자세한 내용: [개인정보처리방침](https://choo-ai-dev.github.io/penmit-pdf/privacy.html)
 
 ### 베타 안내 (0.5.0)
 
@@ -125,8 +125,8 @@ Handwriting apps keep your notes inside their own cloud. Penmit PDF has **no ser
 
 | Device | How |
 | --- | --- |
-| iPhone, iPad | Open the [web app](https://ai-inspact-lab.github.io/penmit-pdf/) in Safari → Share → **Add to Home Screen** |
-| Windows | `Penmit-PDF-Setup-x.y.z.exe` or `-portable.exe` from [Releases](https://github.com/AI-Inspact-Lab/penmit-pdf/releases) |
+| iPhone, iPad | Open the [web app](https://choo-ai-dev.github.io/penmit-pdf/) in Safari → Share → **Add to Home Screen** |
+| Windows | `Penmit-PDF-Setup-x.y.z.exe` or `-portable.exe` from [Releases](https://github.com/Choo-AI-Dev/penmit-pdf/releases) |
 | Linux | `Penmit-PDF-x.y.z-x86_64.AppImage` or `.deb` |
 | Android | `Penmit-PDF-x.y.z.apk` (allow installs from unknown sources) |
 | Anything else | The web app in Chrome, Edge or Safari |
@@ -149,7 +149,7 @@ Each PDF is stored as `<sha256>/document.pdf` (uploaded once), `meta.json` and `
 
 ### Privacy
 
-No server is involved, and the developer receives nothing. Data stays in the device's IndexedDB and in the Google Drive or repository you chose. Sign-in data and tokens are kept only on that device, so don't use them on a shared computer, and limit a GitHub token to one repository with Contents permission. See the [privacy policy](https://ai-inspact-lab.github.io/penmit-pdf/privacy.html).
+No server is involved, and the developer receives nothing. Data stays in the device's IndexedDB and in the Google Drive or repository you chose. Sign-in data and tokens are kept only on that device, so don't use them on a shared computer, and limit a GitHub token to one repository with Contents permission. See the [privacy policy](https://choo-ai-dev.github.io/penmit-pdf/privacy.html).
 
 ---
 
